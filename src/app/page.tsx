@@ -122,10 +122,14 @@ export default function Home() {
                 <>
                   <hr className="section-divider" />
                   <BookingForm
-                    services={visibleServices} serviceId={selectedService}
-                    date={confirmedDate} time={confirmedTime}
-                    isSubmitting={isSubmitting} serverResult={result}
-                    onSubmit={submitBooking} onBack={() => setStep("datetime")}
+                    services={visibleServices}
+                    serviceId={selectedService}
+                    date={selectedDate}
+                    time={selectedTime}
+                    isSubmitting={isSubmitting}
+                    serverResult={result}
+                    onSubmit={submitBooking}
+                    onBack={() => setStep("datetime")}
                   />
                 </>
               )}
