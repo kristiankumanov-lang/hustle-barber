@@ -47,9 +47,11 @@ export default function BookingForm({
     });
   }
 
-  const formattedDate = new Date(date).toLocaleDateString("bg-BG", {
-    weekday: "long", day: "numeric", month: "long",
-  });
+const formattedDate = date
+  ? new Date(date + "T00:00:00").toLocaleDateString("bg-BG", {
+      weekday: "long", day: "numeric", month: "long",
+    })
+  : "";
 
   const inputClass = `
     w-full px-4 py-3 rounded-xl border border-[#333330] bg-[#2A2A2A]
