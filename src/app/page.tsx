@@ -16,6 +16,7 @@ export default function Home() {
     businessName, services, workingHours,
     isLoading, loadError,
     selectedService, selectedDate, selectedTime,
+    confirmedService, confirmedDate, confirmedTime,
     step, result, isSubmitting,
     timeSlots, isSlotsLoading,
     selectService, selectDate, selectTime,
@@ -99,9 +100,9 @@ export default function Home() {
               <SuccessMessage
                 result={result}
                 onReset={reset}
-                serviceName={visibleServices.find(s => s.id === selectedService)?.name}
-                date={selectedDate}
-                time={selectedTime}
+                serviceName={visibleServices.find(s => s.id === confirmedService)?.name}
+                date={confirmedDate}
+                time={confirmedTime}
               />
             </div>
           ) : (
@@ -122,7 +123,7 @@ export default function Home() {
                   <hr className="section-divider" />
                   <BookingForm
                     services={visibleServices} serviceId={selectedService}
-                    date={selectedDate} time={selectedTime}
+                    date={confirmedDate} time={confirmedTime}
                     isSubmitting={isSubmitting} serverResult={result}
                     onSubmit={submitBooking} onBack={() => setStep("datetime")}
                   />
