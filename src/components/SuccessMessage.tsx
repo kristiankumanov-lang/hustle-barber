@@ -4,9 +4,18 @@ import { BookingResult } from "@/lib/types";
 interface Props {
   result: BookingResult;
   onReset: () => void;
+  serviceName?: string;
+  date?: string;
+  time?: string;
 }
 
-export default function SuccessMessage({ result, onReset }: Props) {
+export default function SuccessMessage({ result, onReset, serviceName, date, time }: Props) {
+  const formattedDate = date
+    ? new Date(date).toLocaleDateString("bg-BG", {
+        weekday: "long", day: "numeric", month: "long",
+      })
+    : "";
+
   return (
     <section className="text-center py-6">
       {result.success ? (
@@ -19,12 +28,38 @@ export default function SuccessMessage({ result, onReset }: Props) {
               </svg>
             </div>
           </div>
-          <h2 className="text-2xl font-semibold text-[#F0EBE3] mb-2"
+
+          <h2 className="text-2xl font-semibold text-[#F0EBE3] mb-4"
               style={{ fontFamily: "var(--font-serif), Georgia, serif" }}>
             Часът е запазен!
           </h2>
-          <p className="text-[#666] text-sm mb-2">{result.message}</p>
-          <div className="inline-flex items-center gap-2 mt-1 mb-8">
+
+          {/* Booking summary */}
+          {(serviceName || date || time) && (
+            <div className="rounded-xl border border-[#2E2E2E] bg-[#181818] p-4 mb-5 text-left max-w-xs mx-auto">
+              {serviceName && (
+                <div className="flex justify-between items-center py-1.5 border-b border-[#2A2A2A]">
+                  <span className="text-[11px] uppercase tracking-widest text-[#555]">Услуга</span>
+                  <span className="text-sm font-medium text-[#C8C3B8]">{serviceName}</span>
+                </div>
+              )}
+              {date && (
+                <div className="flex justify-between items-center py-1.5 border-b border-[#2A2A2A]">
+                  <span className="text-[11px] uppercase tracking-widest text-[#555]">Дата</span>
+                  <span className="text-sm font-medium text-[#C8C3B8] capitalize">{formattedDate}</span>
+                </div>
+              )}
+              {time && (
+                <div className="flex justify-between items-center py-1.5">
+                  <span className="text-[11px] uppercase tracking-widest text-[#555]">Час</span>
+                  <span className="text-xl font-bold text-[#F0EBE3]"
+                        style={{ fontFamily: "var(--font-serif), Georgia, serif" }}>{time}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="inline-flex items-center gap-2 mb-8">
             <div className="h-px w-8 bg-[#2E2E2E]" />
             <span className="text-[11px] text-[#444] tracking-[0.25em] uppercase"
                   style={{ fontFamily: "var(--font-serif), Georgia, serif" }}>
