@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg:          #1A1A1A;
+  --bg-card:     #222222;
+  --bg-input:    #2A2A2A;
+  --ink:         #EDE8E0;
+  --ink-muted:   #7A7570;
+  --ink-faint:   #4A4845;
+  --border:      #333330;
+  --border-soft: #2C2C2A;
+
+  --font-cormorant: var(--font-serif);
+  --font-dm-sans:   var(--font-sans);
+}
+
+html { background-color: var(--bg); }
+
+body {
+  background-color: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+.section-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1.5rem 0;
+}
+
+.step-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 0.875rem;
+}
+.step-num {
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  border: 1.5px solid #4A4845;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+  color: #7A7570;
+}
+.step-title {
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: 1.2rem;
+  font-weight: 400;
+  color: var(--ink);
+  letter-spacing: 0.015em;
+  line-height: 1.3;
+}
