@@ -12,7 +12,6 @@ import { fetchBusiness, fetchServices, fetchWorkingHours } from "@/lib/queries";
 export type BookingStep = "service" | "datetime" | "form" | "success";
 
 export function useBooking() {
-  // Данни от Supabase
   const [businessId, setBusinessId] = useState<string>("");
   const [businessName, setBusinessName] = useState<string>("");
   const [services, setServices] = useState<Service[]>([]);
@@ -20,7 +19,6 @@ export function useBooking() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string>("");
 
-  // Booking flow
   const [selectedService, setSelectedService] = useState<string>("");
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [selectedTime, setSelectedTime] = useState<string>("");
@@ -28,11 +26,15 @@ export function useBooking() {
   const [result, setResult] = useState<BookingResult | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Слотове от API route
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
   const [isSlotsLoading, setIsSlotsLoading] = useState(false);
 
-  // Зареждане на business, services, working_hours при mount
+  // ✅ Запазваме детайлите на успешния booking отделно —
+  // selectedTime се изчиства след loadSlots, но confirmedTime остава.
+  const [confirmedService, setConfirmedService] = useState<string>("");
+  const [confirmedDate, setConfirmedDate] = useState<string>("");
+  const [confirmedTime, setConfirmedTime] = useState<string>("");
+
   useEffect(() => {
     async function loadData() {
       setIsLoading(true);
@@ -65,7 +67,6 @@ export function useBooking() {
     loadData();
   }, []);
 
-  // Зареждане на свободни слотове при смяна на дата
   const loadSlots = useCallback(
     async (dateStr: string) => {
       if (!dateStr || !businessId) {
@@ -79,7 +80,6 @@ export function useBooking() {
           `/api/availability?date=${dateStr}&business_id=${businessId}&_t=${Date.now()}`
         );
         const json = await res.json();
-        console.log("[loadSlots] API response:", JSON.stringify(json, null, 2));
         setTimeSlots(json.slots ?? []);
       } catch {
         console.error("Грешка при зареждане на слотове");
@@ -90,12 +90,10 @@ export function useBooking() {
     [businessId]
   );
 
-  // Ако след обновяване на слотовете избраният час вече е зает, изчисти selection-а.
-  // FIX БЪГ 1: Не пренасочвай ако в момента се показва съобщение за грешка —
-  // потребителят трябва да види грешката, преди UI-ят да се смени.
   useEffect(() => {
     if (!selectedTime || timeSlots.length === 0) return;
-    if (result && !result.success) return; // изчакай потребителят да види грешката
+    if (result && !result.success) return;
+    if (step === "success") return; // ✅ Не пипай ако сме в success стъпка
     const slot = timeSlots.find((s) => s.time === selectedTime);
     if (slot && !slot.available) {
       setSelectedTime("");
@@ -117,8 +115,6 @@ export function useBooking() {
     loadSlots(dateStr);
   }
 
-  // FIX БЪГ 2: Изчисти предишната грешка при избор на нов час — иначе
-  // старото error съобщение се показва в новата форма.
   function selectTime(time: string) {
     const slot = timeSlots.find((s) => s.time === time);
     if (!slot?.available) return;
@@ -130,7 +126,6 @@ export function useBooking() {
   async function submitBooking(
     data: { name: string; email: string; phone?: string }
   ) {
-    // Защита срещу double submit
     if (isSubmitting) return;
     setIsSubmitting(true);
     setResult(null);
@@ -158,10 +153,13 @@ export function useBooking() {
       });
 
       if (json.success) {
+        // ✅ Запази детайлите ПРЕДИ loadSlots да изчисти selectedTime
+        setConfirmedService(selectedService);
+        setConfirmedDate(selectedDate);
+        setConfirmedTime(selectedTime);
         setStep("success");
       }
 
-      // Обновяване на слотовете след всеки опит (успешен или не)
       loadSlots(selectedDate);
     } catch {
       setResult({
@@ -177,6 +175,9 @@ export function useBooking() {
     setSelectedService("");
     setSelectedDate("");
     setSelectedTime("");
+    setConfirmedService("");
+    setConfirmedDate("");
+    setConfirmedTime("");
     setTimeSlots([]);
     setStep("service");
     setResult(null);
@@ -191,6 +192,9 @@ export function useBooking() {
     selectedService,
     selectedDate,
     selectedTime,
+    confirmedService,
+    confirmedDate,
+    confirmedTime,
     step,
     result,
     isSubmitting,
@@ -204,4 +208,3 @@ export function useBooking() {
     setStep,
   };
 }
-
