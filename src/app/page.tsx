@@ -96,7 +96,13 @@ export default function Home() {
         <div className="bg-[#1C1C1C] border border-[#2E2E2E] rounded-2xl shadow-[0_4px_40px_rgba(0,0,0,0.5)]">
           {step === "success" && result ? (
             <div className="px-7 py-9 sm:px-10">
-              <SuccessMessage result={result} onReset={reset} />
+              <SuccessMessage
+                result={result}
+                onReset={reset}
+                serviceName={visibleServices.find(s => s.id === selectedService)?.name}
+                date={selectedDate}
+                time={selectedTime}
+              />
             </div>
           ) : (
             <div className="px-6 py-7 sm:px-9 sm:py-8">
