@@ -29,8 +29,7 @@ export function useBooking() {
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
   const [isSlotsLoading, setIsSlotsLoading] = useState(false);
 
-  // ✅ Запазваме детайлите на успешния booking отделно —
-  // selectedTime се изчиства след loadSlots, но confirmedTime остава.
+  // Запазваме детайлите отделно, защото след submit reloadSlots може да изчисти selectedTime.
   const [confirmedService, setConfirmedService] = useState<string>("");
   const [confirmedDate, setConfirmedDate] = useState<string>("");
   const [confirmedTime, setConfirmedTime] = useState<string>("");
@@ -93,7 +92,8 @@ export function useBooking() {
   useEffect(() => {
     if (!selectedTime || timeSlots.length === 0) return;
     if (result && !result.success) return;
-    if (step === "success") return; // ✅ Не пипай ако сме в success стъпка
+    if (step === "success") return;
+
     const slot = timeSlots.find((s) => s.time === selectedTime);
     if (slot && !slot.available) {
       setSelectedTime("");
@@ -106,27 +106,29 @@ export function useBooking() {
   function selectService(serviceId: string) {
     setSelectedService(serviceId);
     setSelectedTime("");
+    setResult(null);
     setStep("datetime");
   }
 
   function selectDate(dateStr: string) {
     setSelectedDate(dateStr);
     setSelectedTime("");
+    setResult(null);
     loadSlots(dateStr);
   }
 
   function selectTime(time: string) {
     const slot = timeSlots.find((s) => s.time === time);
     if (!slot?.available) return;
+
     setSelectedTime(time);
     setResult(null);
     setStep("form");
   }
 
-  async function submitBooking(
-    data: { name: string; email: string; phone?: string }
-  ) {
+  async function submitBooking(data: { name: string; email: string; phone?: string }) {
     if (isSubmitting) return;
+
     setIsSubmitting(true);
     setResult(null);
 
@@ -145,15 +147,18 @@ export function useBooking() {
         }),
       });
 
-      const json = await res.json();
+      const json: BookingResult = await res.json();
 
       setResult({
-        success: json.success,
+        success: Boolean(json.success),
         message: json.message,
+        status: json.status,
+        bookingId: json.bookingId,
+        telegramConfirmUrl: json.telegramConfirmUrl,
+        expiresAt: json.expiresAt,
       });
 
       if (json.success) {
-        // ✅ Запази детайлите ПРЕДИ loadSlots да изчисти selectedTime
         setConfirmedService(selectedService);
         setConfirmedDate(selectedDate);
         setConfirmedTime(selectedTime);
