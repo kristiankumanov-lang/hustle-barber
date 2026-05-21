@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer, isServerConfigured } from "@/lib/supabase-server";
 import { CreateBookingPayload } from "@/lib/types";
+import { getTodaySofia } from "@/lib/slots";
 import { Resend } from "resend";
 
 export const dynamic = "force-dynamic";
@@ -51,6 +52,15 @@ export async function POST(request: NextRequest) {
   }
   if (!/^\d{2}:\d{2}$/.test(start_time)) {
     return NextResponse.json({ success: false, message: "Невалиден формат на час." }, { status: 400 });
+  }
+
+  // 🔒 Server-side guard: не позволявай записване за днес или минала дата
+  // (по българско време). Това е защитата дори някой да заобиколи frontend-а.
+  if (booking_date <= getTodaySofia()) {
+    return NextResponse.json(
+      { success: false, message: "Записване за днешния ден вече не е възможно. Моля, изберете следващ свободен ден." },
+      { status: 400 }
+    );
   }
 
   // Зареди услуга
@@ -142,7 +152,6 @@ export async function POST(request: NextRequest) {
       `,
     });
   } catch (emailError) {
-    // Мейлът не е критичен — логваме грешката но не спираме flow-а
     console.error("Грешка при изпращане на мейл:", emailError);
   }
 

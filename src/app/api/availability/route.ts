@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase-server";
-import { generateSlotsForDay, isWorkingDay } from "@/lib/slots";
+import { generateSlotsForDay, isWorkingDay, getTodaySofia } from "@/lib/slots";
 import { WorkingHoursRow } from "@/lib/types";
 
 const BUSINESS_ID = "b0000000-0000-0000-0000-000000000001";
@@ -14,6 +14,12 @@ export async function GET(request: NextRequest) {
       { error: "Липсва параметър: date е задължителен." },
       { status: 400 }
     );
+  }
+
+  // 🔒 Блокирай днешния ден и всички минали дати (по българско време).
+  // Сравнението е string vs string в "YYYY-MM-DD" → хронологично коректно.
+  if (date <= getTodaySofia()) {
+    return NextResponse.json({ slots: [] });
   }
 
   // Зареди работното време
@@ -57,16 +63,11 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // ✅ FIX: .slice(0, 10) нормализира booking_date до "YYYY-MM-DD"
-  // Работи независимо дали Supabase връща "2026-04-07",
-  // "2026-04-07T00:00:00" или "2026-04-07T00:00:00+00:00"
+  // .slice(0, 10) нормализира booking_date до "YYYY-MM-DD"
   const bookedTimes = (bookingsData ?? [])
     .filter((b) => b.booking_date.slice(0, 10) === date)
     .map((b) => b.start_time.slice(0, 5));
 
-  // generateSlotsForDay приема (startTime, endTime, bookedTimes) — точно
-  // както е дефинирано в slots.ts; start_time от базата е "10:00:00",
-  // slice(0, 5) → "10:00" за по-чисто подаване
   const slots = generateSlotsForDay(
     wh.start_time.slice(0, 5),
     wh.end_time.slice(0, 5),

@@ -2,6 +2,20 @@ import { TimeSlot, WorkingHoursRow } from "./types";
 
 export const SLOT_INTERVAL = 30; // минути
 
+/**
+ * Връща днешната дата по българско време (Europe/Sofia) като "YYYY-MM-DD".
+ * Работи еднакво на клиента и на сървъра — Vercel върви на UTC, затова
+ * НЕ използваме new Date().getDate() директно за "днес".
+ */
+export function getTodaySofia(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Sofia",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
 /** Проверка дали даден ден е работен спрямо working_hours от базата */
 export function isWorkingDay(
   date: Date,
@@ -40,13 +54,16 @@ export function generateSlotsForDay(
   return slots;
 }
 
-/** Генериране на дните за показване (следващите N дни) */
+/**
+ * Генериране на дните за показване.
+ * Започваме от УТРЕ (i = 1) — днешният ден не е достъпен за записване.
+ */
 export function getUpcomingDays(count: number = 14): Date[] {
   const days: Date[] = [];
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  for (let i = 0; i < count; i++) {
+  for (let i = 1; i <= count; i++) {
     const date = new Date(today);
     date.setDate(today.getDate() + i);
     days.push(date);
