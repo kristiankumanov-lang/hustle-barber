@@ -28,6 +28,8 @@ export interface TimeSlot {
   available: boolean;
 }
 
+export type BookingStatus = "pending" | "confirmed" | "expired" | "cancelled";
+
 /** Данни от формата за записване */
 export interface BookingFormData {
   serviceId: string;
@@ -42,6 +44,10 @@ export interface BookingFormData {
 export interface BookingResult {
   success: boolean;
   message: string;
+  status?: BookingStatus;
+  bookingId?: string;
+  telegramConfirmUrl?: string;
+  expiresAt?: string;
 }
 
 /** Payload за POST /api/bookings */
