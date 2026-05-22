@@ -10,6 +10,9 @@ import { sendAdminBookingEmail } from "@/lib/booking-email";
 
 export const dynamic = "force-dynamic";
 
+// Максимум потвърдени часа на един Telegram акаунт за един и същи ден.
+const MAX_CONFIRMED_PER_DAY = 1;
+
 type TelegramUser = {
   id: number;
   username?: string;
@@ -136,6 +139,34 @@ async function getServiceName(serviceId: string): Promise<string> {
   return ((data as ServiceRecord | null)?.name ?? "Избрана услуга");
 }
 
+/**
+ * Брои колко ПОТВЪРДЕНИ часа вече има този Telegram акаунт за същия ден.
+ * Използваме telegram_user_id (акаунтът), не chat_id.
+ * Изключваме текущата резервация (excludeId), за да не брои сама себе си.
+ */
+async function countConfirmedSameDay(
+  telegramUserId: number,
+  bookingDate: string,
+  excludeId: string
+): Promise<number> {
+  const { count, error } = await supabaseServer
+    .from("bookings")
+    .select("id", { count: "exact", head: true })
+    .eq("telegram_user_id", telegramUserId)
+    .eq("booking_date", bookingDate)
+    .eq("status", "confirmed")
+    .neq("id", excludeId);
+
+  if (error) {
+    console.error("Грешка при броене на дневен лимит:", error.message);
+    // При грешка сме консервативни — връщаме голямо число, за да НЕ потвърдим
+    // (по-добре да откажем легитимен, отколкото да пуснем abuse).
+    return Number.MAX_SAFE_INTEGER;
+  }
+
+  return count ?? 0;
+}
+
 function buildBookingPreviewText(booking: BookingRecord, serviceName: string): string {
   return [
     "💈 Потвърждение на резервация",
@@ -164,6 +195,16 @@ function buildConfirmedText(booking: BookingRecord, serviceName: string): string
     `Час: ${formatTime(booking.start_time)} — ${formatTime(booking.end_time)}`,
     "",
     "Очакваме ви в Hustle Barber!",
+  ].join("\n");
+}
+
+function buildLimitText(bookingDate: string): string {
+  return [
+    "⚠️ Вече имате потвърден час за този ден.",
+    "",
+    `Дата: ${formatDate(bookingDate)}`,
+    "",
+    "Може да запазите само един час на ден. Ако искате друг час, моля свържете се с нас директно.",
   ].join("\n");
 }
 
@@ -291,6 +332,20 @@ async function handleConfirm(callbackQuery: TelegramCallbackQuery) {
       messageId,
       "Времето за потвърждение изтече. Часът е освободен. Моля, направете нова резервация от сайта."
     );
+    return;
+  }
+
+  // 🔒 Дневен лимит: максимум 1 потвърден час на Telegram акаунт за деня.
+  const confirmedToday = await countConfirmedSameDay(
+    callbackQuery.from.id,
+    booking.booking_date,
+    booking.id
+  );
+
+  if (confirmedToday >= MAX_CONFIRMED_PER_DAY) {
+    await markExpired(booking.id); // освободи слота, който държеше pending записа
+    await answerTelegramCallback(callbackQuery.id, "Вече имате час за този ден.", true);
+    await editTelegramMessage(chatId, messageId, buildLimitText(booking.booking_date));
     return;
   }
 
