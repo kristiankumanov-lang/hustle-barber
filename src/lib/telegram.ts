@@ -66,6 +66,22 @@ export async function editTelegramMessage(
   });
 }
 
+/**
+ * Маха (или сменя) само inline бутоните на съобщение, без да пипа текста.
+ * Подай празен keyboard { inline_keyboard: [] }, за да премахнеш бутона.
+ */
+export async function editTelegramReplyMarkup(
+  chatId: number,
+  messageId: number,
+  replyMarkup: ReplyMarkup
+) {
+  return callTelegram("editMessageReplyMarkup", {
+    chat_id: chatId,
+    message_id: messageId,
+    reply_markup: replyMarkup,
+  });
+}
+
 export async function answerTelegramCallback(
   callbackQueryId: string,
   text?: string,
@@ -90,7 +106,7 @@ export function buildTelegramConfirmUrl(token: string): string {
 export function buildConfirmKeyboard(token: string): ReplyMarkup {
   return {
     inline_keyboard: [
-      [{ text: "✅ Потвърждавам часа", callback_data: `confirm:${token}` }],
+      [{ text: "Потвърждавам часа", callback_data: `confirm:${token}` }],
     ],
   };
 }
