@@ -16,6 +16,20 @@ const MAX_CONFIRMED_PER_DAY = 1;
 // Телефон на салона — смени плейсхолдъра с реалния номер.
 const SHOP_PHONE = "[0886695870]";
 
+// Telegram акаунти, които прескачат дневния лимит (за тестване).
+// Задава се в env: TELEGRAM_ADMIN_IDS="991950550,123456789"
+// В прод просто не задавай променливата → списъкът е празен.
+const ADMIN_IDS = new Set(
+  (process.env.TELEGRAM_ADMIN_IDS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+);
+
+function isAdminId(telegramUserId: number): boolean {
+  return ADMIN_IDS.has(String(telegramUserId));
+}
+
 type TelegramUser = {
   id: number;
   username?: string;
@@ -342,17 +356,20 @@ async function handleConfirm(callbackQuery: TelegramCallbackQuery) {
   }
 
   // 🔒 Дневен лимит: максимум 1 потвърден час на Telegram акаунт за деня.
-  const confirmedToday = await countConfirmedSameDay(
-    callbackQuery.from.id,
-    booking.booking_date,
-    booking.id
-  );
+  // Админ акаунтите (TELEGRAM_ADMIN_IDS) прескачат лимита — за тестване.
+  if (!isAdminId(callbackQuery.from.id)) {
+    const confirmedToday = await countConfirmedSameDay(
+      callbackQuery.from.id,
+      booking.booking_date,
+      booking.id
+    );
 
-  if (confirmedToday >= MAX_CONFIRMED_PER_DAY) {
-    await markExpired(booking.id);
-    await answerTelegramCallback(callbackQuery.id, "Вече имаш час за този ден.", true);
-    await editTelegramMessage(chatId, messageId, buildLimitText(booking.booking_date));
-    return;
+    if (confirmedToday >= MAX_CONFIRMED_PER_DAY) {
+      await markExpired(booking.id);
+      await answerTelegramCallback(callbackQuery.id, "Вече имаш час за този ден.", true);
+      await editTelegramMessage(chatId, messageId, buildLimitText(booking.booking_date));
+      return;
+    }
   }
 
   const overlap = await hasConfirmedOverlap(booking);
