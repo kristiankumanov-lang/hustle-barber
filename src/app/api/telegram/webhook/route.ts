@@ -10,15 +10,18 @@ import { sendAdminBookingEmail } from "@/lib/booking-email";
 
 export const dynamic = "force-dynamic";
 
+// 🔎 МАРКЕР ЗА ВЕРСИЯ — отвори /api/telegram/webhook в браузъра.
+// Ако виждаш този маркер → новият код е деплойнат.
+const VERSION = "v3-playful-whitelist";
+
 // Максимум потвърдени часа на един Telegram акаунт за един и същи ден.
 const MAX_CONFIRMED_PER_DAY = 1;
 
 // Телефон на салона — смени плейсхолдъра с реалния номер.
-const SHOP_PHONE = "[0886695870]";
+const SHOP_PHONE = "[ТЕЛЕФОН]";
 
 // Telegram акаунти, които прескачат дневния лимит (за тестване).
-// Задава се в env: TELEGRAM_ADMIN_IDS="991950550,123456789"
-// В прод просто не задавай променливата → списъкът е празен.
+// Задава се в env: TELEGRAM_ADMIN_IDS="991950550"
 const ADMIN_IDS = new Set(
   (process.env.TELEGRAM_ADMIN_IDS ?? "")
     .split(",")
@@ -156,11 +159,6 @@ async function getServiceName(serviceId: string): Promise<string> {
   return ((data as ServiceRecord | null)?.name ?? "Избрана услуга");
 }
 
-/**
- * Брои колко ПОТВЪРДЕНИ часа вече има този Telegram акаунт за същия ден.
- * Използваме telegram_user_id (акаунтът), не chat_id.
- * Изключваме текущата резервация (excludeId), за да не брои сама себе си.
- */
 async function countConfirmedSameDay(
   telegramUserId: number,
   bookingDate: string,
@@ -355,8 +353,14 @@ async function handleConfirm(callbackQuery: TelegramCallbackQuery) {
     return;
   }
 
-  // 🔒 Дневен лимит: максимум 1 потвърден час на Telegram акаунт за деня.
-  // Админ акаунтите (TELEGRAM_ADMIN_IDS) прескачат лимита — за тестване.
+  // 🔒 Дневен лимит — админите (TELEGRAM_ADMIN_IDS) го прескачат.
+  // ЛОГ: виждаме точно кой id идва и дали е разпознат като админ.
+  console.log(
+    `[webhook ${VERSION}] confirm from user_id=${callbackQuery.from.id} ` +
+      `isAdmin=${isAdminId(callbackQuery.from.id)} ` +
+      `adminIds=[${Array.from(ADMIN_IDS).join(",")}]`
+  );
+
   if (!isAdminId(callbackQuery.from.id)) {
     const confirmedToday = await countConfirmedSameDay(
       callbackQuery.from.id,
@@ -428,7 +432,13 @@ async function handleConfirm(callbackQuery: TelegramCallbackQuery) {
 }
 
 export async function GET() {
-  return NextResponse.json({ ok: true, route: "telegram-webhook" });
+  // 🔎 Отвори този route в браузъра — ако виждаш version по-долу, новият код е жив.
+  return NextResponse.json({
+    ok: true,
+    route: "telegram-webhook",
+    version: VERSION,
+    adminIdsLoaded: Array.from(ADMIN_IDS),
+  });
 }
 
 export async function POST(request: NextRequest) {
