@@ -1,34 +1,25 @@
+/**
+ * Telegram webhook v2 — PASSIVE MODE.
+ *
+ * ИЗПОЛЗВА СЕ САМО за reminder opt-in от клиента:
+ *  - клиентът цъка линк от SuccessMessage → отваря бота с /start <reminder_token>
+ *  - ботът намира booking-а по reminder_token и записва telegram_chat_id
+ *  - НЕ показва бутон за потвърждение
+ *  - НЕ променя booking.status (часът вече е "confirmed" от bookings/route.ts)
+ *  - НЕ има callback flow за потвърждаване
+ *
+ * Старите cancel/confirm flow-и са изключени.
+ * Reminder cron-ът (1 час преди часа) продължава да работи независимо
+ * и праща съобщение на записания telegram_chat_id.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase-server";
-import {
-  answerTelegramCallback,
-  buildConfirmKeyboard,
-  editTelegramReplyMarkup,
-  sendTelegramMessage,
-} from "@/lib/telegram";
-import { sendAdminBookingEmail } from "@/lib/booking-email";
+import { sendTelegramMessage } from "@/lib/telegram";
 
 export const dynamic = "force-dynamic";
 
-const VERSION = "v4-chat-history";
-
-// Максимум потвърдени часа на един Telegram акаунт за един и същи ден.
-const MAX_CONFIRMED_PER_DAY = 1;
-
-// Телефон на салона — смени плейсхолдъра с реалния номер.
-const SHOP_PHONE = "[ТЕЛЕФОН]";
-
-// Telegram акаунти, които прескачат дневния лимит (за тестване).
-const ADMIN_IDS = new Set(
-  (process.env.TELEGRAM_ADMIN_IDS ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean)
-);
-
-function isAdminId(telegramUserId: number): boolean {
-  return ADMIN_IDS.has(String(telegramUserId));
-}
+const VERSION = "v2-passive-reminder";
 
 type TelegramUser = {
   id: number;
@@ -40,71 +31,39 @@ type TelegramUser = {
 type TelegramMessage = {
   message_id: number;
   text?: string;
-  chat: {
-    id: number;
-  };
+  chat: { id: number };
   from?: TelegramUser;
-};
-
-type TelegramCallbackQuery = {
-  id: string;
-  data?: string;
-  from: TelegramUser;
-  message?: TelegramMessage;
 };
 
 type TelegramUpdate = {
   message?: TelegramMessage;
-  callback_query?: TelegramCallbackQuery;
 };
 
 type BookingRecord = {
   id: string;
-  business_id: string;
   service_id: string;
   booking_date: string;
   start_time: string;
   end_time: string;
-  customer_name: string;
-  customer_email: string | null;
-  customer_phone: string | null;
   status: "pending" | "confirmed" | "expired" | "cancelled";
-  confirmation_token: string | null;
-  expires_at: string | null;
-};
-
-type ServiceRecord = {
-  name: string;
+  reminder_token: string | null;
 };
 
 function isValidRequest(request: NextRequest): boolean {
   const expectedSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
   if (!expectedSecret) return true;
-
   const urlSecret = request.nextUrl.searchParams.get("secret");
   const headerSecret = request.headers.get("x-telegram-bot-api-secret-token");
-
   return urlSecret === expectedSecret || headerSecret === expectedSecret;
 }
 
 function extractStartToken(text?: string): string | null {
   if (!text) return null;
-
   const match = text.trim().match(/^\/start(?:\s+(.+))?$/);
   const token = match?.[1]?.trim();
-
   if (!token) return null;
-  if (!/^[A-Za-z0-9_-]{8,64}$/.test(token)) return null;
-
-  return token;
-}
-
-function extractConfirmToken(data?: string): string | null {
-  if (!data?.startsWith("confirm:")) return null;
-
-  const token = data.slice("confirm:".length).trim();
-  if (!/^[A-Za-z0-9_-]{8,64}$/.test(token)) return null;
-
+  // UUID-формат: 36 символа, само hex + тирета
+  if (!/^[A-Za-z0-9-]{8,64}$/.test(token)) return null;
   return token;
 }
 
@@ -121,326 +80,90 @@ function formatTime(time: string): string {
   return time.slice(0, 5);
 }
 
-function isExpired(booking: BookingRecord): boolean {
-  return Boolean(booking.expires_at && booking.expires_at <= new Date().toISOString());
-}
-
-async function getBookingByToken(token: string): Promise<BookingRecord | null> {
-  const { data, error } = await supabaseServer
-    .from("bookings")
-    .select(
-      "id, business_id, service_id, booking_date, start_time, end_time, customer_name, customer_email, customer_phone, status, confirmation_token, expires_at"
-    )
-    .eq("confirmation_token", token)
-    .maybeSingle();
-
-  if (error) {
-    console.error("Грешка при търсене на booking token:", error.message);
-    return null;
-  }
-
-  return (data as BookingRecord | null) ?? null;
-}
-
 async function getServiceName(serviceId: string): Promise<string> {
-  const { data, error } = await supabaseServer
+  const { data } = await supabaseServer
     .from("services")
     .select("name")
     .eq("id", serviceId)
     .maybeSingle();
-
-  if (error) {
-    console.error("Грешка при търсене на услуга:", error.message);
-  }
-
-  return ((data as ServiceRecord | null)?.name ?? "Избрана услуга");
-}
-
-async function countConfirmedSameDay(
-  telegramUserId: number,
-  bookingDate: string,
-  excludeId: string
-): Promise<number> {
-  const { count, error } = await supabaseServer
-    .from("bookings")
-    .select("id", { count: "exact", head: true })
-    .eq("telegram_user_id", telegramUserId)
-    .eq("booking_date", bookingDate)
-    .eq("status", "confirmed")
-    .neq("id", excludeId);
-
-  if (error) {
-    console.error("Грешка при броене на дневен лимит:", error.message);
-    return Number.MAX_SAFE_INTEGER;
-  }
-
-  return count ?? 0;
-}
-
-// ─────────────────────────────────────────────────────────────
-// Текстове на бота (закачлив тон, без емоджи за да не се чупят)
-// ─────────────────────────────────────────────────────────────
-
-function buildBookingPreviewText(booking: BookingRecord, serviceName: string): string {
-  return [
-    "Опаа, момчето си е запазило час за посещение!",
-    "Ще се радвам да се видим, айде сега да си потвърдиш часа:",
-    "",
-    `Услуга: ${serviceName}`,
-    `Дата: ${formatDate(booking.booking_date)}`,
-    `Час: ${formatTime(booking.start_time)} — ${formatTime(booking.end_time)}`,
-    "",
-    `Име: ${booking.customer_name}`,
-    booking.customer_phone ? `Телефон: ${booking.customer_phone}` : null,
-    booking.customer_email ? `Имейл: ${booking.customer_email}` : null,
-    "",
-    "Натисни бутона, за да потвърдиш.",
-    "Ако не потвърдиш до 10 минути, часът се освобождава.",
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
-function buildConfirmedText(booking: BookingRecord, serviceName: string): string {
-  return [
-    "Евала машинкаа! Чакам те тогава.",
-    "А ако нещо не успееш да дойдеш — знаеш, предпочитам да ми кажеш навреме, за да си запазим добрите отношения :)",
-    "",
-    `Услуга: ${serviceName}`,
-    `Дата: ${formatDate(booking.booking_date)}`,
-    `Час: ${formatTime(booking.start_time)} — ${formatTime(booking.end_time)}`,
-    "",
-    "До скоро в Hustle Barber!",
-  ].join("\n");
-}
-
-function buildLimitText(bookingDate: string): string {
-  return [
-    "Братле, вече имаш час за този ден!",
-    `Искаш да го сменим? Обади се: ${SHOP_PHONE}`,
-    "",
-    `Дата: ${formatDate(bookingDate)}`,
-  ].join("\n");
-}
-
-async function markExpired(bookingId: string) {
-  const { error } = await supabaseServer
-    .from("bookings")
-    .update({ status: "expired" })
-    .eq("id", bookingId)
-    .eq("status", "pending");
-
-  if (error) {
-    console.warn("Неуспешно маркиране като expired:", error.message);
-  }
-}
-
-async function hasConfirmedOverlap(booking: BookingRecord): Promise<boolean> {
-  const { data, error } = await supabaseServer
-    .from("bookings")
-    .select("id")
-    .eq("business_id", booking.business_id)
-    .eq("booking_date", booking.booking_date)
-    .eq("status", "confirmed")
-    .neq("id", booking.id)
-    .lt("start_time", booking.end_time)
-    .gt("end_time", booking.start_time)
-    .limit(1);
-
-  if (error) {
-    console.error("Грешка при проверка за overlap при потвърждение:", error.message);
-    return true;
-  }
-
-  return Boolean(data && data.length > 0);
+  return (data?.name as string) ?? "Избрана услуга";
 }
 
 async function handleStart(message: TelegramMessage) {
   const chatId = message.chat.id;
+  const from = message.from;
   const token = extractStartToken(message.text);
 
   if (!token) {
     await sendTelegramMessage(
       chatId,
-      "Здрасти! Този бот потвърждава часовете в Hustle Barber. Отвори линка за потвърждение от сайта."
+      "Здрасти! За да получаваш напомняне за часа си, отвори линка от страницата на потвърждение в сайта."
     );
     return;
   }
 
-  const booking = await getBookingByToken(token);
+  // Намери booking-а по reminder_token (passive — само ще запишем chat_id).
+  const { data: booking, error } = await supabaseServer
+    .from("bookings")
+    .select("id, service_id, booking_date, start_time, end_time, status, reminder_token")
+    .eq("reminder_token", token)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Telegram webhook: грешка при заявка:", error.message);
+    await sendTelegramMessage(chatId, "Възникна грешка. Опитай пак след малко.");
+    return;
+  }
 
   if (!booking) {
     await sendTelegramMessage(
       chatId,
-      "Хмм, тоя линк не върши работа. Направи нова резервация от сайта."
+      "Не намерих такава резервация. Може би линкът е стар или невалиден."
     );
     return;
   }
 
-  const serviceName = await getServiceName(booking.service_id);
+  const b = booking as BookingRecord;
 
-  if (booking.status === "confirmed") {
-    await sendTelegramMessage(chatId, buildConfirmedText(booking, serviceName));
-    return;
-  }
-
-  if (booking.status !== "pending") {
+  if (b.status === "cancelled" || b.status === "expired") {
     await sendTelegramMessage(
       chatId,
-      "Тоя час вече не е активен. Избери нов свободен час от сайта."
+      "Тази резервация вече не е активна. За нов час — направи резервация от сайта."
     );
     return;
   }
 
-  if (isExpired(booking)) {
-    await markExpired(booking.id);
-    await sendTelegramMessage(
-      chatId,
-      "Опа, времето за потвърждение изтече и часът се освободи. Пробвай пак от сайта."
-    );
+  // Запиши chat_id-то на клиента, за да може reminder cron-ът да му прати съобщение.
+  // НЕ променяме статуса на booking-а — той вече е "confirmed" от bookings/route.ts.
+  const { error: updError } = await supabaseServer
+    .from("bookings")
+    .update({
+      telegram_user_id: from?.id ?? null,
+      telegram_chat_id: chatId,
+      telegram_username: from?.username ?? null,
+    })
+    .eq("id", b.id);
+
+  if (updError) {
+    console.error("Telegram webhook: грешка при update:", updError.message);
+    await sendTelegramMessage(chatId, "Записах те, но има проблем с напомнянето. Извинявай.");
     return;
   }
+
+  const serviceName = await getServiceName(b.service_id);
 
   await sendTelegramMessage(
     chatId,
-    buildBookingPreviewText(booking, serviceName),
-    buildConfirmKeyboard(token)
+    [
+      "Готово! Ще ти напомня 1 час преди часа.",
+      "",
+      `Услуга: ${serviceName}`,
+      `Дата: ${formatDate(b.booking_date)}`,
+      `Час: ${formatTime(b.start_time)} — ${formatTime(b.end_time)}`,
+      "",
+      "До скоро в Hustle Barber!",
+    ].join("\n")
   );
-}
-
-/**
- * Маха само inline бутона от предишното (preview) съобщение, без да сменя
- * текста му — така preview-то остава в чата като история, само бутонът
- * изчезва (за да не може да се цъка повторно). После пращаме НОВО съобщение.
- */
-async function removeKeyboard(chatId: number, messageId: number) {
-  try {
-    await editTelegramReplyMarkup(chatId, messageId, { inline_keyboard: [] });
-  } catch {
-    // ако editът не сработи (напр. идентичен), просто продължаваме
-  }
-}
-
-async function handleConfirm(callbackQuery: TelegramCallbackQuery) {
-  const token = extractConfirmToken(callbackQuery.data);
-  const message = callbackQuery.message;
-  const chatId = message?.chat.id;
-  const messageId = message?.message_id;
-
-  if (!token || !chatId || !messageId) {
-    await answerTelegramCallback(callbackQuery.id, "Невалидна заявка.", true);
-    return;
-  }
-
-  const booking = await getBookingByToken(token);
-
-  if (!booking) {
-    await answerTelegramCallback(callbackQuery.id, "Невалиден линк.", true);
-    await sendTelegramMessage(
-      chatId,
-      "Хмм, тоя линк не върши работа. Направи нова резервация от сайта."
-    );
-    return;
-  }
-
-  const serviceName = await getServiceName(booking.service_id);
-
-  if (booking.status === "confirmed") {
-    await answerTelegramCallback(callbackQuery.id, "Часът вече е потвърден.");
-    await removeKeyboard(chatId, messageId);
-    await sendTelegramMessage(chatId, buildConfirmedText(booking, serviceName));
-    return;
-  }
-
-  if (booking.status !== "pending" || isExpired(booking)) {
-    await markExpired(booking.id);
-    await answerTelegramCallback(callbackQuery.id, "Времето за потвърждение изтече.", true);
-    await removeKeyboard(chatId, messageId);
-    await sendTelegramMessage(
-      chatId,
-      "Опа, времето за потвърждение изтече и часът се освободи. Пробвай пак от сайта."
-    );
-    return;
-  }
-
-  // 🔒 Дневен лимит — админите (TELEGRAM_ADMIN_IDS) го прескачат.
-  console.log(
-    `[webhook ${VERSION}] confirm user_id=${callbackQuery.from.id} ` +
-      `isAdmin=${isAdminId(callbackQuery.from.id)}`
-  );
-
-  if (!isAdminId(callbackQuery.from.id)) {
-    const confirmedToday = await countConfirmedSameDay(
-      callbackQuery.from.id,
-      booking.booking_date,
-      booking.id
-    );
-
-    if (confirmedToday >= MAX_CONFIRMED_PER_DAY) {
-      await markExpired(booking.id);
-      await answerTelegramCallback(callbackQuery.id, "Вече имаш час за този ден.", true);
-      await removeKeyboard(chatId, messageId);
-      await sendTelegramMessage(chatId, buildLimitText(booking.booking_date));
-      return;
-    }
-  }
-
-  const overlap = await hasConfirmedOverlap(booking);
-  if (overlap) {
-    await markExpired(booking.id);
-    await answerTelegramCallback(callbackQuery.id, "Часът вече е зает.", true);
-    await removeKeyboard(chatId, messageId);
-    await sendTelegramMessage(
-      chatId,
-      "Ееех, някой те изпревари за тоя час. Избери друг свободен от сайта."
-    );
-    return;
-  }
-
-  const confirmedAt = new Date().toISOString();
-  const { data: updatedData, error: updateError } = await supabaseServer
-    .from("bookings")
-    .update({
-      status: "confirmed",
-      confirmed_at: confirmedAt,
-      telegram_user_id: callbackQuery.from.id,
-      telegram_chat_id: chatId,
-      telegram_username: callbackQuery.from.username ?? null,
-    })
-    .eq("id", booking.id)
-    .eq("status", "pending")
-    .select(
-      "id, business_id, service_id, booking_date, start_time, end_time, customer_name, customer_email, customer_phone, status, confirmation_token, expires_at"
-    )
-    .single();
-
-  if (updateError || !updatedData) {
-    console.error("Грешка при потвърждение:", updateError?.message);
-    await answerTelegramCallback(callbackQuery.id, "Грешка при потвърждение.", true);
-    return;
-  }
-
-  const updatedBooking = updatedData as BookingRecord;
-
-  try {
-    await sendAdminBookingEmail({
-      customer_name: updatedBooking.customer_name,
-      customer_email: updatedBooking.customer_email,
-      customer_phone: updatedBooking.customer_phone,
-      service_name: serviceName,
-      booking_date: updatedBooking.booking_date,
-      start_time: updatedBooking.start_time,
-      end_time: updatedBooking.end_time,
-    });
-  } catch (emailError) {
-    console.error("Грешка при admin email след Telegram confirmation:", emailError);
-  }
-
-  // Чат-стил: махаме бутона от preview-то (остава като история),
-  // после пращаме потвърждението като НОВО съобщение отдолу.
-  await answerTelegramCallback(callbackQuery.id, "Часът е потвърден!");
-  await removeKeyboard(chatId, messageId);
-  await sendTelegramMessage(chatId, buildConfirmedText(updatedBooking, serviceName));
 }
 
 export async function GET() {
@@ -448,7 +171,7 @@ export async function GET() {
     ok: true,
     route: "telegram-webhook",
     version: VERSION,
-    adminIdsLoaded: Array.from(ADMIN_IDS),
+    mode: "passive-reminder-opt-in",
   });
 }
 
@@ -468,10 +191,7 @@ export async function POST(request: NextRequest) {
     if (update.message) {
       await handleStart(update.message);
     }
-
-    if (update.callback_query) {
-      await handleConfirm(update.callback_query);
-    }
+    // Callback queries се игнорират — няма inline бутони в v2.
   } catch (error) {
     console.error("Telegram webhook error:", error);
   }
