@@ -1,19 +1,31 @@
 /**
- * POST /api/bookings
- * Новите резервации влизат като pending и чакат Telegram потвърждение.
- * email и phone са optional — само name е задължително от клиентските данни.
+ * POST /api/bookings (v2)
+ *
+ * Промени спрямо v1:
+ *  - Телефон е задължителен.
+ *  - reCAPTCHA v3 верификация (score >= RECAPTCHA_MIN_SCORE).
+ *  - Записът влиза директно като "confirmed" (без Telegram потвърждение).
+ *  - Генерират се ДВА различни token-а: cancel_token и reminder_token.
+ *  - Връща telegramReminderUrl за opt-in от страна на клиента (без potvurzhdenie).
+ *  - Веднага праща структуриран мейл към барбера с бутон "Отмени часа".
  */
 
 import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabase-server";
+import { supabaseServer, isServerConfigured } from "@/lib/supabase-server";
 import { CreateBookingPayload } from "@/lib/types";
 import { getTodaySofia } from "@/lib/slots";
-import { buildTelegramConfirmUrl } from "@/lib/telegram";
+import { sendAdminBookingEmail } from "@/lib/booking-email";
 
 export const dynamic = "force-dynamic";
 
-const HOLD_MINUTES = 10;
+const RECAPTCHA_MIN_SCORE = 0.5;
+const RECAPTCHA_VERIFY_URL = "https://www.google.com/recaptcha/api/siteverify";
+
+// Български мобилен формат: 0XXXXXXXXX (10 цифри) или +359XXXXXXXXX.
+// Приема и с интервали/тирета — нормализираме преди валидация.
+const PHONE_DIGITS_MIN = 9;
+const PHONE_DIGITS_MAX = 13;
 
 function addMinutes(time: string, minutes: number): string {
   const [h, m] = time.split(":").map(Number);
@@ -27,22 +39,69 @@ function toDbTime(time: string): string {
   return time.length === 5 ? `${time}:00` : time;
 }
 
+function normalizePhone(raw: string): string {
+  return raw.replace(/[\s\-()]/g, "");
+}
+
+function isValidPhone(raw: string): boolean {
+  const phone = normalizePhone(raw);
+  // Само цифри и евентуален водещ "+"
+  if (!/^\+?\d+$/.test(phone)) return false;
+  const digits = phone.replace(/^\+/, "");
+  if (digits.length < PHONE_DIGITS_MIN || digits.length > PHONE_DIGITS_MAX) return false;
+  return true;
+}
+
+async function verifyRecaptcha(token: string, remoteip?: string): Promise<{
+  ok: boolean;
+  score: number;
+  reason?: string;
+}> {
+  const secret = process.env.RECAPTCHA_SECRET_KEY;
+  if (!secret) {
+    return { ok: false, score: 0, reason: "RECAPTCHA_SECRET_KEY липсва" };
+  }
+
+  const params = new URLSearchParams({ secret, response: token });
+  if (remoteip) params.set("remoteip", remoteip);
+
+  try {
+    const res = await fetch(RECAPTCHA_VERIFY_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: params.toString(),
+    });
+    const data = await res.json();
+
+    if (!data?.success) {
+      return { ok: false, score: 0, reason: `recaptcha failed: ${(data?.["error-codes"] ?? []).join(",")}` };
+    }
+
+    const score: number = typeof data.score === "number" ? data.score : 0;
+    return { ok: score >= RECAPTCHA_MIN_SCORE, score };
+  } catch (e) {
+    return { ok: false, score: 0, reason: `recaptcha fetch error: ${String(e)}` };
+  }
+}
+
 function isActiveBooking(status: string | null, expiresAt: string | null, nowIso: string) {
   if (status === "confirmed") return true;
+  // Старите pending записи от v1 — оставяме съвместимост: ако още са в hold периода → блокиращи.
   if (status === "pending" && expiresAt && expiresAt > nowIso) return true;
   return false;
 }
 
-function createConfirmationToken(): string {
-  // Telegram /start parameter supports letters, digits, _ and - up to 64 chars.
-  return randomUUID().replaceAll("-", "");
+function buildTelegramReminderUrl(reminderToken: string): string | null {
+  const username = process.env.TELEGRAM_BOT_USERNAME;
+  if (!username) return null;
+  return `https://t.me/${username.replace("@", "")}?start=${encodeURIComponent(reminderToken)}`;
 }
 
 export async function POST(request: NextRequest) {
-  if (!process.env.TELEGRAM_BOT_USERNAME) {
+  if (!isServerConfigured()) {
     return NextResponse.json(
-      { success: false, message: "Telegram bot username не е конфигуриран." },
-      { status: 500 }
+      { success: false, message: "Supabase не е конфигуриран на сървъра." },
+      { status: 503 }
     );
   }
 
@@ -62,13 +121,36 @@ export async function POST(request: NextRequest) {
     booking_date,
     start_time,
     customer_name,
-    customer_email,
     customer_phone,
+    customer_email,
+    recaptcha_token,
   } = body;
 
+  // === Валидация ===
   if (!business_id || !service_id || !booking_date || !start_time || !customer_name) {
     return NextResponse.json(
       { success: false, message: "Липсват задължителни полета." },
+      { status: 400 }
+    );
+  }
+
+  if (!customer_phone || !customer_phone.trim()) {
+    return NextResponse.json(
+      { success: false, message: "Телефонът е задължителен." },
+      { status: 400 }
+    );
+  }
+
+  if (!isValidPhone(customer_phone)) {
+    return NextResponse.json(
+      { success: false, message: "Невалиден формат на телефона." },
+      { status: 400 }
+    );
+  }
+
+  if (!recaptcha_token) {
+    return NextResponse.json(
+      { success: false, message: "Липсва reCAPTCHA проверка." },
       { status: 400 }
     );
   }
@@ -79,7 +161,6 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
-
   if (!/^\d{2}:\d{2}$/.test(start_time)) {
     return NextResponse.json(
       { success: false, message: "Невалиден формат на час." },
@@ -87,7 +168,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // 🔒 Server-side guard: не позволявай записване за днес или минала дата.
+  // 🔒 Не позволявай записване за днес или минала дата.
   if (booking_date <= getTodaySofia()) {
     return NextResponse.json(
       {
@@ -99,6 +180,19 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // === reCAPTCHA ===
+  const remoteIp =
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? undefined;
+  const recap = await verifyRecaptcha(recaptcha_token, remoteIp);
+  if (!recap.ok) {
+    console.warn("reCAPTCHA блокира заявка:", recap);
+    return NextResponse.json(
+      { success: false, message: "Защитата срещу спам не позволи заявката. Опитай отново." },
+      { status: 403 }
+    );
+  }
+
+  // === Услуга ===
   const { data: serviceData, error: svcError } = await supabaseServer
     .from("services")
     .select("duration_minutes, name")
@@ -118,7 +212,7 @@ export async function POST(request: NextRequest) {
   const endTimeDb = toDbTime(end_time);
   const nowIso = new Date().toISOString();
 
-  // Lazy cleanup само за този ден.
+  // Lazy cleanup на стари pending записи от v1 (обратна съвместимост).
   await supabaseServer
     .from("bookings")
     .update({ status: "expired" })
@@ -127,7 +221,7 @@ export async function POST(request: NextRequest) {
     .eq("status", "pending")
     .lt("expires_at", nowIso);
 
-  // Проверка за overlap срещу confirmed + активни pending записи.
+  // === Overlap проверка ===
   const { data: conflicts, error: conflictError } = await supabaseServer
     .from("bookings")
     .select("id, status, expires_at")
@@ -156,10 +250,16 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const confirmationToken = createConfirmationToken();
-  const expiresAt = new Date(Date.now() + HOLD_MINUTES * 60 * 1000).toISOString();
+  // === Token-и ===
+  // Два РАЗЛИЧНИ token-а: cancel и reminder.
+  // НИКОГА не се replace-ват един друг — всеки има тесен scope.
+  const cancelToken = randomUUID();
+  const reminderToken = randomUUID();
 
-  const { data: insertedBooking, error: insertError } = await supabaseServer
+  // === Insert като CONFIRMED ===
+  const normalizedPhone = normalizePhone(customer_phone);
+
+  const { data: inserted, error: insertError } = await supabaseServer
     .from("bookings")
     .insert({
       business_id,
@@ -168,17 +268,17 @@ export async function POST(request: NextRequest) {
       start_time: startTimeDb,
       end_time: endTimeDb,
       customer_name: customer_name.trim(),
+      customer_phone: normalizedPhone,
       customer_email: customer_email?.trim() || null,
-      customer_phone: customer_phone?.trim() || null,
-      status: "pending",
-      confirmation_token: confirmationToken,
-      expires_at: expiresAt,
-      confirmed_at: null,
+      status: "confirmed",
+      confirmed_at: new Date().toISOString(),
+      cancel_token: cancelToken,
+      reminder_token: reminderToken,
     })
-    .select("id, confirmation_token, expires_at")
+    .select("id")
     .single();
 
-  if (insertError || !insertedBooking) {
+  if (insertError || !inserted) {
     console.error("Грешка при запис:", insertError?.message);
     return NextResponse.json(
       { success: false, message: "Грешка при запазване на часа." },
@@ -186,15 +286,31 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const telegramConfirmUrl = buildTelegramConfirmUrl(confirmationToken);
+  // === Мейл към барбера ===
+  try {
+    await sendAdminBookingEmail({
+      booking_id: inserted.id,
+      customer_name: customer_name.trim(),
+      customer_phone: normalizedPhone,
+      customer_email: customer_email?.trim() || null,
+      service_name: serviceData.name,
+      duration_minutes: serviceData.duration_minutes,
+      booking_date,
+      start_time: startTimeDb,
+      end_time: endTimeDb,
+      cancel_token: cancelToken,
+    });
+  } catch (emailError) {
+    // Мейлът не е критичен — booking-ът вече е в базата.
+    console.error("Грешка при admin email:", emailError);
+  }
 
+  // === Отговор ===
   return NextResponse.json({
     success: true,
-    status: "pending",
-    bookingId: insertedBooking.id,
-    expiresAt: insertedBooking.expires_at,
-    telegramConfirmUrl,
-    message:
-      "Часът е временно запазен. Потвърдете го в Telegram до 10 минути.",
+    status: "confirmed",
+    bookingId: inserted.id,
+    telegramReminderUrl: buildTelegramReminderUrl(reminderToken),
+    message: "Часът ви е запазен успешно!",
   });
 }
