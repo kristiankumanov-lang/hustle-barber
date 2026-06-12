@@ -33,11 +33,11 @@ export type BookingStatus = "pending" | "confirmed" | "expired" | "cancelled";
 /** Данни от формата за записване */
 export interface BookingFormData {
   serviceId: string;
-  date: string; // ISO date string "YYYY-MM-DD"
-  time: string; // "10:00"
+  date: string; // "YYYY-MM-DD"
+  time: string; // "HH:MM"
   name: string;
-  email: string;
-  phone?: string;
+  phone: string; // required от v2
+  email?: string; // optional
 }
 
 /** Резултат от резервация */
@@ -46,8 +46,8 @@ export interface BookingResult {
   message: string;
   status?: BookingStatus;
   bookingId?: string;
-  telegramConfirmUrl?: string;
-  expiresAt?: string;
+  /** Telegram deep link за opt-in за напомняне 1 час преди (опционално). */
+  telegramReminderUrl?: string;
 }
 
 /** Payload за POST /api/bookings */
@@ -57,6 +57,12 @@ export interface CreateBookingPayload {
   booking_date: string; // "YYYY-MM-DD"
   start_time: string; // "HH:MM"
   customer_name: string;
-  customer_email: string;
-  customer_phone?: string;
+  customer_phone: string; // required от v2
+  customer_email?: string; // optional
+  recaptcha_token: string;
+}
+
+/** Payload за POST /api/cancel */
+export interface CancelBookingPayload {
+  token: string;
 }
