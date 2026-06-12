@@ -23,6 +23,7 @@ export default function SuccessMessage({ result, onReset, serviceName, date, tim
     <section className="text-center py-6">
       {result.success ? (
         <>
+          {/* Зелена checkmark — часът е запазен веднага, не "чакаме потвърждение" */}
           <div className="relative w-14 h-14 mx-auto mb-6">
             <div className="absolute inset-0 rounded-full bg-[#F0EBE3]/5 animate-ping" />
             <div className="relative w-14 h-14 rounded-full bg-[#F0EBE3] flex items-center justify-center">
@@ -32,12 +33,11 @@ export default function SuccessMessage({ result, onReset, serviceName, date, tim
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="#111"
-                strokeWidth="2.2"
+                strokeWidth="2.4"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               >
-                <circle cx="12" cy="12" r="9" />
-                <path d="M12 7v5l3 2" />
+                <path d="M5 12.5l5 5L20 7.5" />
               </svg>
             </div>
           </div>
@@ -46,12 +46,12 @@ export default function SuccessMessage({ result, onReset, serviceName, date, tim
             className="text-2xl font-semibold text-[#F0EBE3] mb-3"
             style={{ fontFamily: "var(--font-serif), Georgia, serif" }}
           >
-            Почти готово!
+            Часът ви е запазен!
           </h2>
 
           <p className="max-w-sm mx-auto text-sm leading-relaxed text-[#8B8580] mb-5">
-            Часът ви е временно запазен за 10 минути. За да бъде потвърден,
-            натиснете бутона по-долу и потвърдете резервацията в Telegram.
+            Очакваме ви в Hustle Barber. Ако нещо изскочи и не можете да дойдете,
+            моля обадете се навреме.
           </p>
 
           {/* Booking summary */}
@@ -85,26 +85,27 @@ export default function SuccessMessage({ result, onReset, serviceName, date, tim
             </div>
           )}
 
-          {result.telegramConfirmUrl ? (
-            <a
-              href={result.telegramConfirmUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center justify-center w-full max-w-xs mx-auto px-6 py-3 rounded-xl bg-[#F0EBE3] text-[#111111] font-semibold hover:bg-white transition-all text-sm tracking-wide shadow-sm mb-4"
-            >
-              Потвърди в Telegram
-            </a>
-          ) : (
-            <div className="rounded-xl border border-yellow-900/40 bg-yellow-950/20 p-3 mb-4 max-w-xs mx-auto">
-              <p className="text-sm text-yellow-200/80">
-                Линкът за Telegram не беше върнат от сървъра. Моля, опитайте отново.
+          {/* OPTIONAL: Telegram reminder opt-in.
+              НЕ е необходимо за резервацията — просто връзва chat_id с booking-а,
+              за да получи клиентът напомняне 1 час преди часа. */}
+          {result.telegramReminderUrl && (
+            <div className="max-w-xs mx-auto mb-6">
+              <a
+                href={result.telegramReminderUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center justify-center gap-2 w-full px-6 py-3 rounded-xl border border-[#2E2E2E] bg-[#181818] hover:bg-[#1F1F1F] hover:border-[#3A3A3A] text-[#C8C3B8] hover:text-[#EDE8E0] transition-all text-sm font-medium"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.568 8.16-1.86 8.79c-.14.622-.51.775-1.034.482l-2.86-2.106-1.38 1.327c-.152.152-.28.28-.574.28l.205-2.913 5.305-4.793c.232-.205-.05-.32-.358-.114l-6.553 4.127-2.825-.882c-.614-.193-.628-.614.128-.91l11.024-4.25c.512-.193.96.114.79.872z"/>
+                </svg>
+                Получи напомняне в Telegram
+              </a>
+              <p className="text-[11px] text-[#555] mt-2">
+                По избор. Ще ти напомним 1 час преди часа.
               </p>
             </div>
           )}
-
-          <p className="text-xs text-[#555] max-w-xs mx-auto mb-8">
-            Ако не потвърдите до 10 минути, часът ще бъде освободен автоматично.
-          </p>
         </>
       ) : (
         <>

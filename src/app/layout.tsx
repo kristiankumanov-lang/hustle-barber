@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { DM_Serif_Display, DM_Sans } from "next/font/google";
 import "./globals.css";
 
@@ -32,6 +33,9 @@ export const metadata: Metadata = {
   description: "Онлайн записване за час при Hustle Barber.",
 };
 
+// reCAPTCHA v3 site key. Public — окей е да е в client bundle-а.
+const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY ?? "";
+
 export default function RootLayout({
   children,
 }: {
@@ -39,7 +43,21 @@ export default function RootLayout({
 }) {
   return (
     <html lang="bg" className={`${dmSerifDisplay.variable} ${dmSans.variable}`}>
-      <body className="min-h-screen">{children}</body>
+      <body className="min-h-screen">
+        {children}
+
+        {/*
+          reCAPTCHA v3 — зарежда се ленив (afterInteractive), за да не блокира
+          render-а. Само ако SITE_KEY е конфигуриран — иначе пропускаме скрипта
+          (например в локална среда без reCAPTCHA, формата ще даде ясна грешка).
+        */}
+        {RECAPTCHA_SITE_KEY ? (
+          <Script
+            src={`https://www.google.com/recaptcha/api.js?render=${RECAPTCHA_SITE_KEY}`}
+            strategy="afterInteractive"
+          />
+        ) : null}
+      </body>
     </html>
   );
 }

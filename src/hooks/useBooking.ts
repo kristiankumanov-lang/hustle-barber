@@ -126,7 +126,12 @@ export function useBooking() {
     setStep("form");
   }
 
-  async function submitBooking(data: { name: string; email: string; phone?: string }) {
+  async function submitBooking(data: {
+    name: string;
+    phone: string;
+    email?: string;
+    recaptcha_token: string;
+  }) {
     if (isSubmitting) return;
 
     setIsSubmitting(true);
@@ -142,8 +147,9 @@ export function useBooking() {
           booking_date: selectedDate,
           start_time: selectedTime,
           customer_name: data.name,
-          customer_email: data.email,
           customer_phone: data.phone,
+          customer_email: data.email,
+          recaptcha_token: data.recaptcha_token,
         }),
       });
 
@@ -154,8 +160,7 @@ export function useBooking() {
         message: json.message,
         status: json.status,
         bookingId: json.bookingId,
-        telegramConfirmUrl: json.telegramConfirmUrl,
-        expiresAt: json.expiresAt,
+        telegramReminderUrl: json.telegramReminderUrl,
       });
 
       if (json.success) {
