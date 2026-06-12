@@ -1,7 +1,9 @@
 /**
- * Мейл към барбера при нова резервация.
- * Включва бутон "Отмени часа" (води към /cancel?token=...) и блок Calendar data
- * с машинно четима информация за бъдещ automation flow (Google Calendar).
+ * Имейли при нова резервация.
+ *
+ *  - sendAdminBookingEmail → към барбера, с cancel бутон + Calendar data блок
+ *  - sendClientBookingEmail → към клиента (само ако е оставил мейл),
+ *    топло потвърждение без cancel права
  */
 
 import { Resend } from "resend";
@@ -28,6 +30,10 @@ function getSiteUrl(): string {
   ).replace(/\/+$/, "");
 }
 
+// ─────────────────────────────────────────────────────────────
+// АДМИН (към барбера) — с cancel бутон + Calendar data блок
+// ─────────────────────────────────────────────────────────────
+
 export interface AdminBookingEmailPayload {
   booking_id: string;
   customer_name: string;
@@ -35,9 +41,9 @@ export interface AdminBookingEmailPayload {
   customer_email: string | null;
   service_name: string;
   duration_minutes: number;
-  booking_date: string; // "YYYY-MM-DD"
-  start_time: string; // "HH:MM:SS" или "HH:MM"
-  end_time: string; // "HH:MM:SS" или "HH:MM"
+  booking_date: string;
+  start_time: string;
+  end_time: string;
   cancel_token: string;
 }
 
@@ -49,10 +55,8 @@ export async function sendAdminBookingEmail(payload: AdminBookingEmailPayload) {
 
   const cancelUrl = `${getSiteUrl()}/cancel?token=${encodeURIComponent(payload.cancel_token)}`;
 
-  // Subject: машинно четим за по-късен parsing.
   const subject = `Нова резервация | Hustle Barber | ${payload.booking_date} ${st}`;
 
-  // Plain-text вариант за scanner-и и за лесен parsing от automation.
   const textBody = [
     "Нова резервация в Hustle Barber",
     "",
@@ -105,7 +109,6 @@ export async function sendAdminBookingEmail(payload: AdminBookingEmailPayload) {
 
       <hr style="border: none; border-top: 1px solid #eee; margin: 16px 0;" />
 
-      <!-- Calendar data: машинно четим блок за automation flow към календара -->
       <pre style="background: #fafafa; padding: 12px; border-radius: 6px; font-size: 12px; color: #444; white-space: pre-wrap;">Calendar data:
 title: ${payload.service_name} - ${payload.customer_name}
 start_date: ${payload.booking_date}
@@ -122,6 +125,83 @@ booking_id: ${payload.booking_id}</pre>
   return resend.emails.send({
     from: "Hustle Barber <onboarding@resend.dev>",
     to: ADMIN_EMAIL,
+    subject,
+    text: textBody,
+    html,
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
+// КЛИЕНТ (към клиента, ако е оставил мейл)
+// Топло потвърждение, БЕЗ cancel бутон (клиент не отменя през мейл).
+// ─────────────────────────────────────────────────────────────
+
+export interface ClientBookingEmailPayload {
+  to_email: string;
+  customer_name: string;
+  service_name: string;
+  duration_minutes: number;
+  booking_date: string;
+  start_time: string;
+  end_time: string;
+}
+
+export async function sendClientBookingEmail(payload: ClientBookingEmailPayload) {
+  const st = formatTime(payload.start_time);
+  const et = formatTime(payload.end_time);
+  const niceDate = formatDate(payload.booking_date);
+
+  const subject = `Часът ти е запазен — Hustle Barber, ${payload.booking_date} ${st}`;
+
+  const textBody = [
+    `Здрасти, ${payload.customer_name}!`,
+    "",
+    "Часът ти в Hustle Barber е запазен.",
+    "",
+    `Услуга: ${payload.service_name}`,
+    `Дата: ${niceDate}`,
+    `Час: ${st} — ${et}`,
+    `Продължителност: ${payload.duration_minutes} мин.`,
+    "",
+    "Очакваме те! Ако нещо изскочи и не можеш да дойдеш, моля обади се навреме.",
+    "",
+    "До скоро,",
+    "Екипът на Hustle Barber",
+  ].join("\n");
+
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 520px; margin: 0 auto; padding: 28px; color: #111;">
+      <h2 style="margin: 0 0 8px 0; font-size: 22px;">Часът ти е запазен 💈</h2>
+      <p style="color: #666; margin: 0 0 20px 0;">Hustle Barber</p>
+
+      <p style="font-size: 15px; line-height: 1.6; margin: 0 0 18px 0;">
+        Здрасти, <strong>${payload.customer_name}</strong>! Часът ти е запазен. Очакваме те!
+      </p>
+
+      <table style="width: 100%; border-collapse: collapse; font-size: 14px; background: #fafafa; border-radius: 8px; padding: 4px;">
+        <tr><td style="padding: 10px 14px; color: #888; width: 130px;">Услуга</td><td style="padding: 10px 14px; font-weight: 600;">${payload.service_name}</td></tr>
+        <tr><td style="padding: 10px 14px; color: #888;">Дата</td><td style="padding: 10px 14px; font-weight: 600;">${niceDate}</td></tr>
+        <tr><td style="padding: 10px 14px; color: #888;">Час</td><td style="padding: 10px 14px; font-weight: 600; font-size: 18px;">${st} — ${et}</td></tr>
+        <tr><td style="padding: 10px 14px; color: #888;">Продължителност</td><td style="padding: 10px 14px;">${payload.duration_minutes} мин.</td></tr>
+      </table>
+
+      <p style="font-size: 14px; color: #555; line-height: 1.6; margin: 22px 0 0 0;">
+        Ако нещо изскочи и не можеш да дойдеш, моля обади се навреме —
+        ще освободим часа за някой друг.
+      </p>
+
+      <p style="font-size: 14px; color: #555; line-height: 1.6; margin: 18px 0 0 0;">
+        До скоро,<br/>
+        <strong>Екипът на Hustle Barber</strong>
+      </p>
+
+      <p style="color: #aaa; font-size: 11px; text-align: center; margin: 28px 0 0 0;">Hustle Barber · Онлайн записване</p>
+    </div>
+  `;
+
+  return resend.emails.send({
+    from: "Hustle Barber <onboarding@resend.dev>",
+    to: payload.to_email,
     subject,
     text: textBody,
     html,

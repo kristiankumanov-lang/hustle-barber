@@ -21,16 +21,29 @@ interface Props {
   onBack: () => void;
 }
 
-// Бърз клиентски regex — само за UX, истинската валидация е в backend-а.
-// Приема +359..., 0888..., с интервали/тирета — нормализираме преди подаване.
-function normalizePhone(raw: string): string {
-  return raw.replace(/[\s\-()]/g, "");
-}
-function isLikelyValidPhone(raw: string): boolean {
-  const p = normalizePhone(raw);
-  if (!/^\+?\d+$/.test(p)) return false;
-  const digits = p.replace(/^\+/, "");
-  return digits.length >= 9 && digits.length <= 13;
+/**
+ * Валидира и нормализира БГ мобилен телефон към "+359XXXXXXXXX".
+ * Приема: 0888..., 0888 123 456, +359888..., 359888...
+ * Само мобилни префикси: 087, 088, 089.
+ */
+function normalizeBgMobile(raw: string): string | null {
+  const cleaned = raw.replace(/[\s\-()]/g, "");
+  if (!/^\+?\d+$/.test(cleaned)) return null;
+  const digits = cleaned.replace(/^\+/, "");
+
+  let nationalNumber: string;
+  if (digits.startsWith("359")) {
+    nationalNumber = digits.slice(3);
+  } else if (digits.startsWith("0")) {
+    nationalNumber = digits.slice(1);
+  } else {
+    return null;
+  }
+
+  if (nationalNumber.length !== 9) return null;
+  if (!/^(87|88|89)\d{7}$/.test(nationalNumber)) return null;
+
+  return `+359${nationalNumber}`;
 }
 
 export default function BookingForm({
@@ -47,7 +60,7 @@ export default function BookingForm({
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
-  const [isPreparing, setIsPreparing] = useState(false); // докато reCAPTCHA генерира token
+  const [isPreparing, setIsPreparing] = useState(false);
 
   const service = getServiceById(services, serviceId);
 
@@ -55,36 +68,38 @@ export default function BookingForm({
     e.preventDefault();
     setError("");
 
-    // Име — required
     if (!name.trim()) {
       setError("Моля, въведете вашето име.");
       return;
     }
 
-    // Телефон — required (v2)
     if (!phone.trim()) {
       setError("Моля, въведете вашия телефон.");
       return;
     }
-    if (!isLikelyValidPhone(phone)) {
-      setError("Моля, въведете валиден телефонен номер.");
+
+    const normalizedPhone = normalizeBgMobile(phone);
+    if (!normalizedPhone) {
+      setError(
+        "Невалиден телефон. Моля, въведете български мобилен номер (087/088/089)."
+      );
       return;
     }
 
-    // Email се валидира само ако е попълнен.
     if (email.trim() && !email.includes("@")) {
       setError("Моля, въведете валиден имейл адрес.");
       return;
     }
 
-    // reCAPTCHA token
     setIsPreparing(true);
     let recaptchaToken: string;
     try {
       recaptchaToken = await executeRecaptcha("submit_booking");
     } catch (e) {
       console.error("reCAPTCHA грешка:", e);
-      setError("Защитата срещу спам не успя да се зареди. Опитайте отново след малко.");
+      setError(
+        "Защитата срещу спам не успя да се зареди. Опитайте отново след малко."
+      );
       setIsPreparing(false);
       return;
     }
@@ -92,7 +107,7 @@ export default function BookingForm({
 
     onSubmit({
       name: name.trim(),
-      phone: normalizePhone(phone),
+      phone: normalizedPhone,
       email: email.trim() || undefined,
       recaptcha_token: recaptchaToken,
     });
@@ -112,12 +127,16 @@ export default function BookingForm({
     focus:outline-none focus:ring-1 focus:ring-[#EDE8E0]/20 focus:border-[#555]
     transition-all duration-150
   `;
-  const labelClass = "block text-xs font-medium text-[#7A7570] mb-1.5 tracking-wide uppercase";
+  const labelClass =
+    "block text-xs font-medium text-[#7A7570] mb-1.5 tracking-wide uppercase";
   const requiredStar = (
     <span className="text-[#EDE8E0]/50 normal-case tracking-normal"> *</span>
   );
   const optionalTag = (
-    <span className="text-[#4A4845] normal-case tracking-normal font-normal"> (по избор)</span>
+    <span className="text-[#4A4845] normal-case tracking-normal font-normal">
+      {" "}
+      (по избор)
+    </span>
   );
 
   const isBusy = isSubmitting || isPreparing;
@@ -129,21 +148,28 @@ export default function BookingForm({
         <span className="step-title">Вашите данни</span>
       </div>
 
-      {/* Booking summary */}
       <div className="rounded-xl border border-[#333330] bg-[#1E1E1E] p-4 mb-6">
         <div className="grid grid-cols-3 gap-3 text-center">
           <div>
-            <p className="text-[10px] uppercase tracking-widest text-[#4A4845] mb-1">Услуга</p>
-            <p className="text-sm font-semibold text-[#C8C3B8] leading-tight">{service?.name}</p>
+            <p className="text-[10px] uppercase tracking-widest text-[#4A4845] mb-1">
+              Услуга
+            </p>
+            <p className="text-sm font-semibold text-[#C8C3B8] leading-tight">
+              {service?.name}
+            </p>
           </div>
           <div className="border-x border-[#333330]">
-            <p className="text-[10px] uppercase tracking-widest text-[#4A4845] mb-1">Дата</p>
+            <p className="text-[10px] uppercase tracking-widest text-[#4A4845] mb-1">
+              Дата
+            </p>
             <p className="text-sm font-semibold text-[#C8C3B8] leading-tight capitalize">
               {formattedDate}
             </p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-widest text-[#4A4845] mb-1">Час</p>
+            <p className="text-[10px] uppercase tracking-widest text-[#4A4845] mb-1">
+              Час
+            </p>
             <p
               className="text-[1.3rem] font-bold text-[#EDE8E0] leading-tight"
               style={{ fontFamily: "var(--font-serif), Georgia, serif" }}
@@ -155,7 +181,6 @@ export default function BookingForm({
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* 1. Име — required */}
         <div>
           <label htmlFor="name" className={labelClass}>
             Име{requiredStar}
@@ -172,7 +197,6 @@ export default function BookingForm({
           />
         </div>
 
-        {/* 2. Телефон — REQUIRED (v2) */}
         <div>
           <label htmlFor="phone" className={labelClass}>
             Телефон{requiredStar}
@@ -182,15 +206,17 @@ export default function BookingForm({
             type="tel"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            placeholder="+359 88 ..."
+            placeholder="0888 123 456"
             className={inputClass}
             autoComplete="tel"
             inputMode="tel"
             required
           />
+          <p className="text-[10px] text-[#4A4845] mt-1.5 ml-1">
+            Български мобилен номер (087, 088 или 089)
+          </p>
         </div>
 
-        {/* 3. Имейл — optional */}
         <div>
           <label htmlFor="email" className={labelClass}>
             Имейл{optionalTag}
@@ -204,6 +230,9 @@ export default function BookingForm({
             className={inputClass}
             autoComplete="email"
           />
+          <p className="text-[10px] text-[#4A4845] mt-1.5 ml-1">
+            Ако го оставиш, ще получиш потвърждение на мейла.
+          </p>
         </div>
 
         <div className="rounded-xl border border-[#333330] bg-[#181818] p-3">
@@ -223,7 +252,12 @@ export default function BookingForm({
               className="flex-shrink-0 mt-0.5 text-red-400"
             >
               <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" />
-              <path d="M8 5v3.5M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              <path
+                d="M8 5v3.5M8 11h.01"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
             </svg>
             <p className="text-sm text-red-400">{error || serverResult?.message}</p>
           </div>
@@ -250,9 +284,25 @@ export default function BookingForm({
           >
             {isBusy ? (
               <span className="flex items-center justify-center gap-2">
-                <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
-                  <circle cx="12" cy="12" r="10" stroke="#111" strokeWidth="3" strokeOpacity="0.2" />
-                  <path d="M12 2a10 10 0 0 1 10 10" stroke="#111" strokeWidth="3" strokeLinecap="round" />
+                <svg
+                  className="animate-spin w-4 h-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                >
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="#111"
+                    strokeWidth="3"
+                    strokeOpacity="0.2"
+                  />
+                  <path
+                    d="M12 2a10 10 0 0 1 10 10"
+                    stroke="#111"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                  />
                 </svg>
                 {isPreparing ? "Подготовка..." : "Запазване..."}
               </span>
@@ -262,7 +312,6 @@ export default function BookingForm({
           </button>
         </div>
 
-        {/* Малка bilezhka за reCAPTCHA — изисква се от Google ToS */}
         <p className="text-[10px] text-center text-[#4A4845] pt-2">
           Тази страница е защитена с reCAPTCHA. Прилагат се{" "}
           <a
