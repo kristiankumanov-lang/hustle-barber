@@ -1,9 +1,7 @@
 /**
- * GET /api/admin/bookings?from=YYYY-MM-DD&to=YYYY-MM-DD&include_past=true
+ * GET /api/admin/bookings?from=YYYY-MM-DD&to=YYYY-MM-DD
  *
  * Връща резервации в дадения период. Само за authenticated barber users.
- * Минава през service_role (заобикаля RLS), но защитен от middleware-а
- * + допълнителна auth проверка тук (defense in depth).
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -39,7 +37,6 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Зареди bookings + service name (join през service_id)
   const { data, error } = await supabaseServer
     .from("bookings")
     .select(
@@ -52,7 +49,6 @@ export async function GET(request: NextRequest) {
       customer_phone,
       customer_email,
       status,
-      created_at,
       confirmed_at,
       cancelled_at,
       service_id,
@@ -73,7 +69,6 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Подреждаме service name-а на първо ниво за по-лесно ползване във frontend.
   type RawBooking = (typeof data)[number] & {
     services?: { name?: string; duration_minutes?: number } | null;
   };
@@ -89,7 +84,6 @@ export async function GET(request: NextRequest) {
       customer_phone: raw.customer_phone,
       customer_email: raw.customer_email,
       status: raw.status,
-      created_at: raw.created_at,
       confirmed_at: raw.confirmed_at,
       cancelled_at: raw.cancelled_at,
       service_name: raw.services?.name ?? "—",

@@ -13,7 +13,6 @@ interface AdminBooking {
   customer_phone: string | null;
   customer_email: string | null;
   status: BookingStatus;
-  created_at: string;
   confirmed_at: string | null;
   cancelled_at: string | null;
   service_name: string;
@@ -32,7 +31,6 @@ function todaySofia(): string {
 }
 
 function addDaysSofia(yyyymmdd: string, days: number): string {
-  // Простa аритметика по дати — за range изчисления.
   const [y, m, d] = yyyymmdd.split("-").map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d));
   dt.setUTCDate(dt.getUTCDate() + days);
@@ -95,7 +93,6 @@ export default function DashboardClient() {
       from = today;
       to = addDaysSofia(today, 7);
     } else {
-      // history: всичко минало (последните 90 дни)
       from = addDaysSofia(today, -90);
       to = addDaysSofia(today, -1);
     }
@@ -136,7 +133,6 @@ export default function DashboardClient() {
       if (!json.ok) {
         alert(json.message ?? "Грешка при отмяна.");
       } else {
-        // Refresh списъка
         await loadBookings(tab);
       }
     } catch {
@@ -145,7 +141,6 @@ export default function DashboardClient() {
     setCancellingId(null);
   }
 
-  // Групиране по дата за по-четим UI
   const grouped = bookings.reduce<Record<string, AdminBooking[]>>((acc, b) => {
     (acc[b.booking_date] ??= []).push(b);
     return acc;
