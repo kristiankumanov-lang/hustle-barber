@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 
 interface Props {
   businessName: string;
@@ -21,6 +22,89 @@ function MustacheFallback({ name }: { name: string }) {
   );
 }
 
+/**
+ * Хамбургер dropdown menu.
+ * Структуриран да е лесно extendable за бъдещи линкове (магазин, галерия и т.н.).
+ */
+function HamburgerMenu() {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close при click извън menu-то
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+
+    if (open) {
+      document.addEventListener("mousedown", onClickOutside);
+      document.addEventListener("keydown", onKey);
+    }
+    return () => {
+      document.removeEventListener("mousedown", onClickOutside);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative" ref={menuRef}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-label="Меню"
+        aria-expanded={open}
+        className="w-8 h-8 flex items-center justify-center rounded-md text-white/60 hover:text-white hover:bg-white/5 transition-colors"
+      >
+        {open ? (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        ) : (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-2 w-56 rounded-xl border border-white/10 bg-[#161616] shadow-2xl z-50 overflow-hidden">
+          <Link
+            href="/admin/login"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-3 px-4 py-3 text-sm text-white/80 hover:text-white hover:bg-white/5 transition-colors"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden className="text-white/40">
+              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+              <polyline points="10 17 15 12 10 7" />
+              <line x1="15" y1="12" x2="3" y2="12" />
+            </svg>
+            <span>Служители</span>
+          </Link>
+
+          {/*
+            Място за бъдещи линкове (например):
+
+            <Link href="/shop" className="...">
+              <icon /> Магазин
+            </Link>
+
+            <Link href="/gallery" className="...">
+              <icon /> Галерия
+            </Link>
+          */}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Header({ businessName }: Props) {
   const [hbOk,   setHbOk]   = useState(true);
   const [logoOk, setLogoOk] = useState(true);
@@ -28,7 +112,7 @@ export default function Header({ businessName }: Props) {
   return (
     <header className="bg-[#0D0D0D] w-full">
 
-      {/* ── Top bar: HB small left · brand name · Est. 2018 ── */}
+      {/* ── Top bar: HB small left · brand name · Est. 2018 · hamburger ── */}
       <div className="max-w-2xl mx-auto px-6 py-3.5 flex items-center gap-3">
 
         {/* HB — small, secondary, subtle */}
@@ -53,16 +137,15 @@ export default function Header({ businessName }: Props) {
           style={{ fontFamily: "var(--font-cormorant), Georgia, serif" }}>
           Est. 2018
         </span>
+
+        {/* Hamburger menu — горе вдясно */}
+        <HamburgerMenu />
       </div>
 
       {/* ── Thin separator ───────────────────────────────── */}
       <div className="border-t border-white/[0.06]" />
 
-      {/* ── Moustache logo — primary hero brand anchor ───────
-          Compact: max-w-[200px], modest vertical padding.
-          Dark background на изображението се слива с header-а —
-          изглежда като интегриран emblem, не като пасната снимка.
-      ─────────────────────────────────────────────────────── */}
+      {/* ── Moustache logo — primary hero brand anchor ─────── */}
       <div className="flex justify-center pt-4 pb-5">
         {logoOk ? (
           <img
