@@ -47,3 +47,23 @@ export async function fetchWorkingHours(
 
   return data ?? [];
 }
+
+/**
+ * Връща списък с блокираните бъдещи дни като ["YYYY-MM-DD", ...].
+ * Минаваме през public API (/api/blocked-days), защото RLS-ът на таблицата
+ * blocked_days е глух за anon. API-то ползва service_role server-side.
+ */
+export async function fetchBlockedDays(businessId: string): Promise<string[]> {
+  try {
+    const res = await fetch(
+      `/api/blocked-days?business_id=${encodeURIComponent(businessId)}&_t=${Date.now()}`,
+      { cache: "no-store" }
+    );
+    if (!res.ok) return [];
+    const json = (await res.json()) as { dates?: string[] };
+    return json.dates ?? [];
+  } catch (e) {
+    console.warn("fetchBlockedDays грешка:", e);
+    return [];
+  }
+}

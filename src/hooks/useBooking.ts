@@ -7,7 +7,12 @@ import {
   WorkingHoursRow,
   TimeSlot,
 } from "@/lib/types";
-import { fetchBusiness, fetchServices, fetchWorkingHours } from "@/lib/queries";
+import {
+  fetchBusiness,
+  fetchServices,
+  fetchWorkingHours,
+  fetchBlockedDays,
+} from "@/lib/queries";
 
 export type BookingStep = "service" | "datetime" | "form" | "success";
 
@@ -16,6 +21,7 @@ export function useBooking() {
   const [businessName, setBusinessName] = useState<string>("");
   const [services, setServices] = useState<Service[]>([]);
   const [workingHours, setWorkingHours] = useState<WorkingHoursRow[]>([]);
+  const [blockedDays, setBlockedDays] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string>("");
 
@@ -49,9 +55,10 @@ export function useBooking() {
       setBusinessId(business.id);
       setBusinessName(business.name);
 
-      const [svc, wh] = await Promise.all([
+      const [svc, wh, blocked] = await Promise.all([
         fetchServices(business.id),
         fetchWorkingHours(business.id),
+        fetchBlockedDays(business.id),
       ]);
 
       if (svc.length === 0) {
@@ -60,6 +67,7 @@ export function useBooking() {
 
       setServices(svc);
       setWorkingHours(wh);
+      setBlockedDays(blocked);
       setIsLoading(false);
     }
 
@@ -197,6 +205,7 @@ export function useBooking() {
     businessName,
     services,
     workingHours,
+    blockedDays,
     isLoading,
     loadError,
     selectedService,
