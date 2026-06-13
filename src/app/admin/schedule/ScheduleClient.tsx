@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import BookingDetailsModal from "./BookingDetailsModal";
+import SlotActionModal from "./SlotActionModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -30,7 +31,7 @@ interface ScheduleBooking {
 }
 
 interface WorkingHour {
-  day_of_week: number; // 0=неделя, 6=събота
+  day_of_week: number;
   start_time: string;
   end_time: string;
 }
@@ -65,10 +66,6 @@ function dayOfWeek(yyyymmdd: string): number {
   return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
 }
 
-function formatTime(t: string): string {
-  return t.slice(0, 5);
-}
-
 const DAY_NAMES = ["Нед", "Пон", "Вт", "Ср", "Чет", "Пет", "Съб"];
 const MONTH_NAMES = ["яну", "фев", "мар", "апр", "май", "юни", "юли", "авг", "сеп", "окт", "ное", "дек"];
 
@@ -81,7 +78,6 @@ function formatDayShort(yyyymmdd: string): { day: string; num: number; mon: stri
   };
 }
 
-// Генериране на 30-минутни слотове за работния ден.
 function generateDaySlots(startTime: string, endTime: string): string[] {
   const slots: string[] = [];
   const [sh, sm] = startTime.slice(0, 5).split(":").map(Number);
@@ -106,29 +102,24 @@ function isSlotInRange(slot: string, rangeStart: string, rangeEnd: string): bool
 const TOTAL_WEEKS = 4;
 
 export default function ScheduleClient() {
-  // Седмицата започва от понеделник на текущата.
   const today = useMemo(() => todaySofia(), []);
 
-  // Намираме понеделника на текущата седмица.
   const currentMonday = useMemo(() => {
-    const dow = dayOfWeek(today); // 0=нед, 1=пон, ...
-    // ако днес е неделя (0), вчера е събота, тоест понеделник беше преди 6 дни.
+    const dow = dayOfWeek(today);
     const daysBack = dow === 0 ? 6 : dow - 1;
     return addDays(today, -daysBack);
   }, [today]);
 
-  const [weekIdx, setWeekIdx] = useState(0); // 0 = текуща седмица
+  const [weekIdx, setWeekIdx] = useState(0);
   const [data, setData] = useState<ScheduleData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedDate, setSelectedDate] = useState<string>(today);
   const [activeBooking, setActiveBooking] = useState<ScheduleBooking | null>(null);
+  const [actionSlot, setActionSlot] = useState<{ date: string; time: string } | null>(null);
   const [busyAction, setBusyAction] = useState(false);
 
-  const weekStart = useMemo(
-    () => addDays(currentMonday, weekIdx * 7),
-    [currentMonday, weekIdx]
-  );
+  const weekStart = useMemo(() => addDays(currentMonday, weekIdx * 7), [currentMonday, weekIdx]);
   const weekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
 
   const weekDays = useMemo(() => {
@@ -148,7 +139,6 @@ export default function ScheduleClient() {
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error ?? "Грешка");
       setData(json);
-      // Ако избраната дата не е в текущата седмица — превключи на понеделник
       if (selectedDate < weekStart || selectedDate > weekEnd) {
         setSelectedDate(weekStart);
       }
@@ -164,7 +154,7 @@ export default function ScheduleClient() {
     loadData();
   }, [loadData]);
 
-  // ─── Helpers за UI ──────────────────────────────────────────────────────
+  // ─── Helpers ────────────────────────────────────────────────────────────
 
   function isDayBlocked(date: string): boolean {
     return !!data?.blocked_days.some((d) => d.blocked_date === date);
@@ -213,47 +203,51 @@ export default function ScheduleClient() {
     setBusyAction(false);
   }
 
-  async function toggleSlotBlock(date: string, slotTime: string) {
+  /**
+   * Блокирай конкретен 30-мин слот. Викан от SlotActionModal или директно
+   * при клик на блокиран слот (за разблокиране).
+   */
+  async function blockSlot(date: string, slotTime: string) {
     if (busyAction) return;
+    setBusyAction(true);
 
-    // Проверка: има ли вече blocked_slot който покрива тоя slot?
-    const existing = blockedSlotsForDay(date).find((b) =>
-      isSlotInRange(slotTime, b.start_time, b.end_time)
-    );
+    const [h, m] = slotTime.split(":").map(Number);
+    const startMin = h * 60 + m;
+    const endMin = startMin + 30;
+    const endTime = `${String(Math.floor(endMin / 60)).padStart(2, "0")}:${String(endMin % 60).padStart(2, "0")}`;
 
+    try {
+      const res = await fetch("/api/admin/block-slot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, start_time: slotTime, end_time: endTime }),
+      });
+      const json = await res.json();
+      if (!json.ok) {
+        alert(json.message ?? "Грешка.");
+      } else {
+        await loadData();
+      }
+    } catch {
+      alert("Мрежова грешка.");
+    }
+    setBusyAction(false);
+  }
+
+  async function unblockSlot(blockedSlotId: string) {
+    if (busyAction) return;
     setBusyAction(true);
     try {
-      if (existing) {
-        // Разблокирай — DELETE по id
-        const res = await fetch("/api/admin/block-slot", {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: existing.id }),
-        });
-        const json = await res.json();
-        if (!json.ok) {
-          alert(json.message ?? "Грешка.");
-        } else {
-          await loadData();
-        }
+      const res = await fetch("/api/admin/block-slot", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: blockedSlotId }),
+      });
+      const json = await res.json();
+      if (!json.ok) {
+        alert(json.message ?? "Грешка.");
       } else {
-        // Блокирай — 30 минутен слот
-        const [h, m] = slotTime.split(":").map(Number);
-        const startMin = h * 60 + m;
-        const endMin = startMin + 30;
-        const endTime = `${String(Math.floor(endMin / 60)).padStart(2, "0")}:${String(endMin % 60).padStart(2, "0")}`;
-
-        const res = await fetch("/api/admin/block-slot", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ date, start_time: slotTime, end_time: endTime }),
-        });
-        const json = await res.json();
-        if (!json.ok) {
-          alert(json.message ?? "Грешка.");
-        } else {
-          await loadData();
-        }
+        await loadData();
       }
     } catch {
       alert("Мрежова грешка.");
@@ -363,27 +357,20 @@ export default function ScheduleClient() {
                   : "border-[#2E2E2E] bg-[#1A1A1A] text-[#C8C3B8] hover:bg-[#222]"
               }`}
             >
-              <span className="text-[10px] uppercase tracking-wider opacity-70">
-                {f.day}
-              </span>
+              <span className="text-[10px] uppercase tracking-wider opacity-70">{f.day}</span>
               <span className="text-base font-bold mt-0.5">{f.num}</span>
               <span className="text-[9px] opacity-70 mt-0.5">{f.mon}</span>
 
-              {/* Indikatori */}
               <div className="flex items-center gap-0.5 mt-1.5 h-1.5">
                 {dayBookings.length > 0 && (
                   <span
-                    className={`w-1.5 h-1.5 rounded-full ${
-                      isActive ? "bg-[#111]" : "bg-yellow-400"
-                    }`}
+                    className={`w-1.5 h-1.5 rounded-full ${isActive ? "bg-[#111]" : "bg-yellow-400"}`}
                     title={`${dayBookings.length} резервации`}
                   />
                 )}
                 {dayBlockedSlots.length > 0 && (
                   <span
-                    className={`w-1.5 h-1.5 rounded-full ${
-                      isActive ? "bg-[#111]" : "bg-red-400"
-                    }`}
+                    className={`w-1.5 h-1.5 rounded-full ${isActive ? "bg-[#111]" : "bg-red-400"}`}
                     title={`${dayBlockedSlots.length} блокирани`}
                   />
                 )}
@@ -403,7 +390,6 @@ export default function ScheduleClient() {
         <div className="py-12 text-center text-[#7A7570] text-sm">Зареждам...</div>
       ) : (
         <div className="rounded-2xl border border-[#2A2A2A] bg-[#161616] p-4 sm:p-6">
-          {/* Header за избрания ден */}
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div>
               <h2
@@ -439,7 +425,6 @@ export default function ScheduleClient() {
             )}
           </div>
 
-          {/* Слотове за избрания ден */}
           {!selDayWorking ? (
             <div className="py-8 text-center text-[#7A7570] text-sm">
               В този ден не се работи (от работното време).
@@ -461,24 +446,24 @@ export default function ScheduleClient() {
                   isSlotInRange(slot, b.start_time, b.end_time)
                 );
 
-                // Класове по тип
                 let cls = "border-[#2E2E2E] bg-[#1E1E1E] text-[#C8C3B8] hover:bg-[#252525] cursor-pointer";
                 let label = "";
-                let onClick: (() => void) | undefined = () => toggleSlotBlock(selectedDate, slot);
+                let onClick: (() => void) | undefined = () =>
+                  setActionSlot({ date: selectedDate, time: slot });
 
                 if (booking) {
-                  // Това е стартът на booking
                   cls = "border-yellow-900/40 bg-yellow-950/30 text-yellow-200 cursor-pointer hover:bg-yellow-950/50";
                   label = booking.customer_name;
                   onClick = () => setActiveBooking(booking);
                 } else if (isInBooking) {
-                  // Това е в средата на booking — show по-малко, не може да се цъка
                   cls = "border-yellow-900/30 bg-yellow-950/20 text-yellow-200/60 cursor-not-allowed";
                   label = "···";
                   onClick = undefined;
                 } else if (blockedSlot) {
                   cls = "border-red-900/40 bg-red-950/30 text-red-300 cursor-pointer hover:bg-red-950/50";
                   label = blockedSlot.reason ?? "Блокиран";
+                  // Директно разблокиране (бутонът за блокиране минава през modal-а)
+                  onClick = () => unblockSlot(blockedSlot.id);
                 }
 
                 return (
@@ -490,9 +475,7 @@ export default function ScheduleClient() {
                   >
                     <span className="text-sm font-bold leading-none">{slot}</span>
                     {label && (
-                      <span className="text-[10px] mt-1 truncate w-full opacity-80">
-                        {label}
-                      </span>
+                      <span className="text-[10px] mt-1 truncate w-full opacity-80">{label}</span>
                     )}
                   </button>
                 );
@@ -514,19 +497,35 @@ export default function ScheduleClient() {
               <span>Блокиран</span>
             </div>
             <div className="ml-auto text-[#555]">
-              Цъкни свободен слот за блокиране/разблокиране
+              Цъкни свободен слот за резервация или блокиране
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal за booking детайли */}
+      {/* Modal за booking детайли (при click на резервация) */}
       {activeBooking && (
         <BookingDetailsModal
           booking={activeBooking}
           onClose={() => setActiveBooking(null)}
           onCancel={() => handleCancelBooking(activeBooking.id)}
           isBusy={busyAction}
+        />
+      )}
+
+      {/* Modal с избор: запази час или блокирай (при click на свободен слот) */}
+      {actionSlot && (
+        <SlotActionModal
+          date={actionSlot.date}
+          startTime={actionSlot.time}
+          onClose={() => setActionSlot(null)}
+          onBlock={() => {
+            blockSlot(actionSlot.date, actionSlot.time);
+          }}
+          onBookingCreated={async () => {
+            setActionSlot(null);
+            await loadData();
+          }}
         />
       )}
     </div>

@@ -2,8 +2,13 @@
  * Имейли при нова резервация.
  *
  *  - sendAdminBookingEmail → към барбера, с cancel бутон + Calendar data блок
- *  - sendClientBookingEmail → към клиента (само ако е оставил мейл),
- *    топло потвърждение без cancel права
+ *  - sendClientBookingEmail → към клиента (само ако е оставил мейл)
+ *
+ * NB: В sandbox режим (sender onboarding@resend.dev) Resend позволява
+ * пращане САМО на акаунт-собственика. Затова клиентският мейл се праща
+ * с BCC към ADMIN_EMAIL — така физически "стига" до Resend и не се
+ * губи. Когато се купи реален домейн и се verify-не, BCC-то може да
+ * отпадне (или да остане за audit log).
  */
 
 import { Resend } from "resend";
@@ -31,7 +36,7 @@ function getSiteUrl(): string {
 }
 
 // ─────────────────────────────────────────────────────────────
-// АДМИН (към барбера) — с cancel бутон + Calendar data блок
+// АДМИН (към барбера)
 // ─────────────────────────────────────────────────────────────
 
 export interface AdminBookingEmailPayload {
@@ -132,8 +137,8 @@ booking_id: ${payload.booking_id}</pre>
 }
 
 // ─────────────────────────────────────────────────────────────
-// КЛИЕНТ (към клиента, ако е оставил мейл)
-// Топло потвърждение, БЕЗ cancel бутон (клиент не отменя през мейл).
+// КЛИЕНТ (към клиента)
+// В sandbox phase минава с BCC към admin-а, за да не блокира Resend.
 // ─────────────────────────────────────────────────────────────
 
 export interface ClientBookingEmailPayload {
@@ -199,9 +204,12 @@ export async function sendClientBookingEmail(payload: ClientBookingEmailPayload)
     </div>
   `;
 
+  // BCC към admin-а — sandbox workaround.
+  // Когато домейнът е verified, BCC-то може да отпадне.
   return resend.emails.send({
     from: "Hustle Barber <onboarding@resend.dev>",
     to: payload.to_email,
+    bcc: ADMIN_EMAIL,
     subject,
     text: textBody,
     html,
