@@ -2,12 +2,14 @@
  * Supabase клиент за СЪРВЪРА с auth (server components / API routes / middleware).
  *
  * Чете auth cookies, за да знае кой е логнатият user.
- * НЕ е същото като supabase-server.ts — този ползва anon key + cookies (auth context),
+ * НЕ е същото като supabase-server.ts — този ползва publishable key + cookies (auth context),
  * а supabase-server.ts ползва service_role key (заобикаля RLS, няма user context).
  *
  * Кога кой:
  *   - Trябва да знаеш "кой user прави това" → supabase-server-auth
  *   - Trябва да четеш/пишеш без user context (cron jobs, public booking insert) → supabase-server
+ *
+ * NB: env naming-ът тук е "SUPABASE" (без второ "a"), консистентно с проекта.
  */
 
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
@@ -18,7 +20,7 @@ export async function createSupabaseServerAuthClient() {
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
     {
       cookies: {
         get(name: string) {
@@ -29,7 +31,6 @@ export async function createSupabaseServerAuthClient() {
             cookieStore.set({ name, value, ...options });
           } catch {
             // В server components не можем да set-ваме cookies — middleware-ът го прави.
-            // Тук тихо подминаваме грешката.
           }
         },
         remove(name: string, options: CookieOptions) {
@@ -44,10 +45,7 @@ export async function createSupabaseServerAuthClient() {
   );
 }
 
-/**
- * Връща текущия логнат user (или null).
- * Удобен helper за server components / API routes.
- */
+/** Връща текущия логнат user (или null). */
 export async function getCurrentUser() {
   const supabase = await createSupabaseServerAuthClient();
   const {
@@ -56,17 +54,12 @@ export async function getCurrentUser() {
   return user;
 }
 
-/**
- * Проверка дали user-ът е "barber" (role от user_metadata).
- * За момента имаме само една роля, но оставяме structure-а за бъдещ scale.
- */
+/** Проверка дали user-ът е "barber" (role от user_metadata). */
 export function isBarberUser(user: { user_metadata?: { role?: string } } | null): boolean {
   return user?.user_metadata?.role === "barber";
 }
 
-/**
- * Проверка дали user-ът трябва да смени паролата (първи login).
- */
+/** Проверка дали user-ът трябва да смени паролата (първи login). */
 export function mustChangePassword(
   user: { user_metadata?: { must_change_password?: boolean } } | null
 ): boolean {
