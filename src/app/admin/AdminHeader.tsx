@@ -22,7 +22,7 @@ export default function AdminHeader({ email }: Props) {
   const navItems = [
     { href: "/admin", label: "Часове" },
     { href: "/admin/schedule", label: "График" },
-    { href: "/admin/new", label: "Добави час" },
+    
   ];
 
   return (
