@@ -13,7 +13,7 @@ export default function Home() {
   const bookingRef = useRef<HTMLDivElement>(null);
 
   const {
-    businessName, services, workingHours,
+    businessName, services, workingHours, blockedDays,
     isLoading, loadError,
     selectedService, selectedDate, selectedTime,
     confirmedService, confirmedDate, confirmedTime,
@@ -112,7 +112,12 @@ export default function Home() {
               {step !== "service" && (
                 <>
                   <hr className="section-divider" />
-                  <Calendar workingHours={workingHours} selected={selectedDate} onSelect={selectDate} />
+                  <Calendar
+                    workingHours={workingHours}
+                    blockedDays={blockedDays}
+                    selected={selectedDate}
+                    onSelect={selectDate}
+                  />
                   <hr className="section-divider" />
                   <TimeSlots slots={timeSlots} selected={selectedTime} onSelect={selectTime} isLoading={isSlotsLoading} />
                 </>
