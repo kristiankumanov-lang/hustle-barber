@@ -4,17 +4,14 @@
  *  - sendAdminBookingEmail → към барбера, с cancel бутон + Calendar data блок
  *  - sendClientBookingEmail → към клиента (само ако е оставил мейл)
  *
- * NB: В sandbox режим (sender onboarding@resend.dev) Resend позволява
- * пращане САМО на акаунт-собственика. Затова клиентският мейл се праща
- * с BCC към ADMIN_EMAIL — така физически "стига" до Resend и не се
- * губи. Когато се купи реален домейн и се verify-не, BCC-то може да
- * отпадне (или да остане за audit log).
+ * Production режим — пращаме от noreply@hustle-barbershop.com (verified domain).
  */
 
 import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const ADMIN_EMAIL = "kristiankumanov@gmail.com";
+const FROM_EMAIL = "Hustle Barber <noreply@hustle-barbershop.com>";
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr + "T00:00:00").toLocaleDateString("bg-BG", {
@@ -31,7 +28,7 @@ function formatTime(time: string): string {
 
 function getSiteUrl(): string {
   return (
-    process.env.NEXT_PUBLIC_SITE_URL ?? "https://hustle-barber-beta.vercel.app"
+    process.env.NEXT_PUBLIC_SITE_URL ?? "https://hustle-barbershop.com"
   ).replace(/\/+$/, "");
 }
 
@@ -128,7 +125,7 @@ booking_id: ${payload.booking_id}</pre>
   `;
 
   return resend.emails.send({
-    from: "Hustle Barber <onboarding@resend.dev>",
+    from: FROM_EMAIL,
     to: ADMIN_EMAIL,
     subject,
     text: textBody,
@@ -138,7 +135,6 @@ booking_id: ${payload.booking_id}</pre>
 
 // ─────────────────────────────────────────────────────────────
 // КЛИЕНТ (към клиента)
-// В sandbox phase минава с BCC към admin-а, за да не блокира Resend.
 // ─────────────────────────────────────────────────────────────
 
 export interface ClientBookingEmailPayload {
@@ -204,12 +200,9 @@ export async function sendClientBookingEmail(payload: ClientBookingEmailPayload)
     </div>
   `;
 
-  // BCC към admin-а — sandbox workaround.
-  // Когато домейнът е verified, BCC-то може да отпадне.
   return resend.emails.send({
-    from: "Hustle Barber <onboarding@resend.dev>",
+    from: FROM_EMAIL,
     to: payload.to_email,
-    bcc: ADMIN_EMAIL,
     subject,
     text: textBody,
     html,
