@@ -10,7 +10,7 @@
 import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-const ADMIN_EMAIL = "kristiankumanov@gmail.com";
+const ADMIN_EMAIL = "tedi191000@gmail.com";
 const FROM_EMAIL = "Hustle Barber <noreply@hustle-barbershop.com>";
 
 function formatDate(dateStr: string): string {
