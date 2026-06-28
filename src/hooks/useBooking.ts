@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   BookingResult,
   Service,
@@ -40,39 +40,39 @@ export function useBooking() {
   const [confirmedDate, setConfirmedDate] = useState<string>("");
   const [confirmedTime, setConfirmedTime] = useState<string>("");
 
-  useEffect(() => {
-    async function loadData() {
-      setIsLoading(true);
-      setLoadError("");
+  // Reusable — викана и от mount-ефекта, и от focus/visibility refresh-а.
+  // НЕ пипа isLoading сама — извикващият решава дали да покаже спинър.
+  const loadData = useCallback(async () => {
+    setLoadError("");
 
-      const business = await fetchBusiness();
-      if (!business) {
-        setLoadError("Няма намерен бизнес в базата данни.");
-        setIsLoading(false);
-        return;
-      }
-
-      setBusinessId(business.id);
-      setBusinessName(business.name);
-
-      const [svc, wh, blocked] = await Promise.all([
-        fetchServices(business.id),
-        fetchWorkingHours(business.id),
-        fetchBlockedDays(business.id),
-      ]);
-
-      if (svc.length === 0) {
-        setLoadError("Няма добавени услуги в базата данни.");
-      }
-
-      setServices(svc);
-      setWorkingHours(wh);
-      setBlockedDays(blocked);
-      setIsLoading(false);
+    const business = await fetchBusiness();
+    if (!business) {
+      setLoadError("Няма намерен бизнес в базата данни.");
+      return;
     }
 
-    loadData();
+    setBusinessId(business.id);
+    setBusinessName(business.name);
+
+    const [svc, wh, blocked] = await Promise.all([
+      fetchServices(business.id),
+      fetchWorkingHours(business.id),
+      fetchBlockedDays(business.id),
+    ]);
+
+    if (svc.length === 0) {
+      setLoadError("Няма добавени услуги в базата данни.");
+    }
+
+    setServices(svc);
+    setWorkingHours(wh);
+    setBlockedDays(blocked);
   }, []);
+
+  useEffect(() => {
+    setIsLoading(true);
+    loadData().finally(() => setIsLoading(false));
+  }, [loadData]);
 
   const loadSlots = useCallback(
     async (dateStr: string) => {
@@ -110,6 +110,38 @@ export function useBooking() {
       }
     }
   }, [timeSlots, selectedTime, step, result]);
+
+  // Refetch при връщане към таба/приложението: visibilitychange + focus +
+  // pageshow (bfcache restore на мобилни браузъри, където focus/visibilitychange
+  // понякога не гърмят при превключване от друго app). Cooldown през ref пази
+  // от двойно опресняване, когато няколко от тези събития гръмнат едновременно.
+  const lastRefreshRef = useRef(0);
+
+  useEffect(() => {
+    const REFRESH_COOLDOWN_MS = 1500;
+
+    function refreshIfStale() {
+      if (document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if (now - lastRefreshRef.current < REFRESH_COOLDOWN_MS) return;
+      lastRefreshRef.current = now;
+
+      loadData();
+      if (selectedDate) {
+        loadSlots(selectedDate);
+      }
+    }
+
+    document.addEventListener("visibilitychange", refreshIfStale);
+    window.addEventListener("focus", refreshIfStale);
+    window.addEventListener("pageshow", refreshIfStale);
+
+    return () => {
+      document.removeEventListener("visibilitychange", refreshIfStale);
+      window.removeEventListener("focus", refreshIfStale);
+      window.removeEventListener("pageshow", refreshIfStale);
+    };
+  }, [loadData, loadSlots, selectedDate]);
 
   function selectService(serviceId: string) {
     setSelectedService(serviceId);
