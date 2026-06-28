@@ -157,7 +157,7 @@ export async function sendClientBookingEmail(payload: ClientBookingEmailPayload)
   const subject = `Часът ти е запазен — Hustle Barber, ${payload.booking_date} ${st}`;
 
   const textBody = [
-    `Здрасти, ${payload.customer_name}!`,
+    `Здравей, ${payload.customer_name}!`,
     "",
     "Часът ти в Hustle Barber е запазен.",
     "",
@@ -181,7 +181,7 @@ export async function sendClientBookingEmail(payload: ClientBookingEmailPayload)
       <p style="color: #666; margin: 0 0 20px 0;">Hustle Barber</p>
 
       <p style="font-size: 15px; line-height: 1.6; margin: 0 0 18px 0;">
-        Здрасти, <strong>${payload.customer_name}</strong>! Часът ти е запазен. Очакваме те!
+        Здравей, <strong>${payload.customer_name}</strong>! Часът ти е запазен. Очакваме те!
       </p>
 
       <table style="width: 100%; border-collapse: collapse; font-size: 14px; background: #fafafa; border-radius: 8px; padding: 4px;">
@@ -190,10 +190,6 @@ export async function sendClientBookingEmail(payload: ClientBookingEmailPayload)
         <tr><td style="padding: 10px 14px; color: #888;">Час</td><td style="padding: 10px 14px; font-weight: 600; font-size: 18px;">${st} — ${et}</td></tr>
         <tr><td style="padding: 10px 14px; color: #888;">Продължителност</td><td style="padding: 10px 14px;">${payload.duration_minutes} мин.</td></tr>
       </table>
-
-      <p style="font-size: 14px; color: #555; line-height: 1.6; margin: 22px 0 0 0;">
-        Очакваме те!
-      </p>
 
       <div style="margin: 22px 0; text-align: center;">
         <a href="${cancelUrl}"
