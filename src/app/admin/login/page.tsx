@@ -1,11 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 
 export default function AdminLoginPage() {
-  const router = useRouter();
   const supabase = createSupabaseBrowserClient();
 
   const [email, setEmail] = useState("");
@@ -36,10 +34,9 @@ export default function AdminLoginPage() {
       return;
     }
 
-    // Login успешен → middleware-ът ще пренасочи към /admin или /admin/change-password
-    // според must_change_password флага. router.refresh() обновява сесията в server-а.
-    router.refresh();
-    router.push("/admin");
+    // Login успешен → пълна навигация (не client-side push), за да изчакаме
+    // auth cookie-то реално да уседне в браузъра преди новата заявка към сървъра.
+    window.location.href = "/admin";
   }
 
   return (

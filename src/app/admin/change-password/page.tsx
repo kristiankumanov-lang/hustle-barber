@@ -1,13 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 
 const MIN_PASSWORD_LENGTH = 8;
 
 export default function ChangePasswordPage() {
-  const router = useRouter();
   const supabase = createSupabaseBrowserClient();
 
   const [newPassword, setNewPassword] = useState("");
@@ -58,9 +56,9 @@ export default function ChangePasswordPage() {
       console.warn("Грешка при изчистване на флага:", metaError.message);
     }
 
-    // 3. Refresh + redirect към dashboard.
-    router.refresh();
-    router.push("/admin");
+    // 3. Пълна навигация (не client-side push), за да изчакаме auth cookie-то
+    // реално да уседне в браузъра преди новата заявка към сървъра.
+    window.location.href = "/admin";
   }
 
   return (
