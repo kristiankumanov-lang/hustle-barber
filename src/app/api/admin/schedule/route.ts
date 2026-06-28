@@ -15,6 +15,7 @@ import { supabaseServer } from "@/lib/supabase-server";
 import { getCurrentUser, isBarberUser } from "@/lib/supabase-server-auth";
 
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 const BUSINESS_ID = "b0000000-0000-0000-0000-000000000001";
 

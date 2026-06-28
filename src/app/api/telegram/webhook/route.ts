@@ -18,6 +18,7 @@ import { supabaseServer } from "@/lib/supabase-server";
 import { sendTelegramMessage } from "@/lib/telegram";
 
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 const VERSION = "v2-passive-reminder";
 

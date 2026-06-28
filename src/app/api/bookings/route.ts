@@ -18,6 +18,7 @@ import {
 } from "@/lib/booking-email";
 
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 const RECAPTCHA_MIN_SCORE = 0.5;
 const RECAPTCHA_VERIFY_URL = "https://www.google.com/recaptcha/api/siteverify";

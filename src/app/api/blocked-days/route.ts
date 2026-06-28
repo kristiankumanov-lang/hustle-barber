@@ -16,6 +16,7 @@ import { supabaseServer } from "@/lib/supabase-server";
 import { getTodaySofia } from "@/lib/slots";
 
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 const FALLBACK_BUSINESS_ID = "b0000000-0000-0000-0000-000000000001";
 const DAYS_AHEAD = 60; // вземаме малко повече от 28, защото няма излишно тежко
