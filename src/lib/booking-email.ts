@@ -10,7 +10,7 @@
 import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-const ADMIN_EMAIL = "tedi191000@gmail.com";
+const ADMIN_EMAIL = "kristiankumanov@gmail.com";
 const FROM_EMAIL = "Hustle Barber <noreply@hustle-barbershop.com>";
 
 function formatDate(dateStr: string): string {
@@ -145,12 +145,14 @@ export interface ClientBookingEmailPayload {
   booking_date: string;
   start_time: string;
   end_time: string;
+  cancel_token: string;
 }
 
 export async function sendClientBookingEmail(payload: ClientBookingEmailPayload) {
   const st = formatTime(payload.start_time);
   const et = formatTime(payload.end_time);
   const niceDate = formatDate(payload.booking_date);
+  const cancelUrl = `${getSiteUrl()}/cancel?token=${encodeURIComponent(payload.cancel_token)}`;
 
   const subject = `Часът ти е запазен — Hustle Barber, ${payload.booking_date} ${st}`;
 
@@ -164,7 +166,10 @@ export async function sendClientBookingEmail(payload: ClientBookingEmailPayload)
     `Час: ${st} — ${et}`,
     `Продължителност: ${payload.duration_minutes} мин.`,
     "",
-    "Очакваме те! Ако нещо изскочи и не можеш да дойдеш, моля обади се навреме.",
+    "Очакваме те!",
+    "",
+    "Ако се налага да отмениш часа си, натисни тук:",
+    cancelUrl,
     "",
     "До скоро,",
     "Екипът на Hustle Barber",
@@ -187,9 +192,16 @@ export async function sendClientBookingEmail(payload: ClientBookingEmailPayload)
       </table>
 
       <p style="font-size: 14px; color: #555; line-height: 1.6; margin: 22px 0 0 0;">
-        Ако нещо изскочи и не можеш да дойдеш, моля обади се навреме —
-        ще освободим часа за някой друг.
+        Очакваме те!
       </p>
+
+      <div style="margin: 22px 0; text-align: center;">
+        <a href="${cancelUrl}"
+           style="display: inline-block; padding: 10px 20px; background: #f5f5f5; color: #c0392b; text-decoration: none; border: 1px solid #e0d0d0; border-radius: 8px; font-weight: 600; font-size: 14px;">
+          Отмени часа
+        </a>
+        <p style="color: #999; font-size: 12px; margin: 8px 0 0 0;">Ако се налага да отмениш часа си, натисни тук.</p>
+      </div>
 
       <p style="font-size: 14px; color: #555; line-height: 1.6; margin: 18px 0 0 0;">
         До скоро,<br/>
@@ -203,6 +215,75 @@ export async function sendClientBookingEmail(payload: ClientBookingEmailPayload)
   return resend.emails.send({
     from: FROM_EMAIL,
     to: payload.to_email,
+    subject,
+    text: textBody,
+    html,
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
+// ОТКАЗ (към барбера)
+// ─────────────────────────────────────────────────────────────
+
+export interface AdminCancelEmailPayload {
+  booking_id: string;
+  customer_name: string;
+  customer_phone: string;
+  customer_email: string | null;
+  service_name: string;
+  booking_date: string;
+  start_time: string;
+  end_time: string;
+}
+
+export async function sendAdminCancelEmail(payload: AdminCancelEmailPayload) {
+  const st = formatTime(payload.start_time);
+  const et = formatTime(payload.end_time);
+  const niceDate = formatDate(payload.booking_date);
+  const emailDisplay = payload.customer_email ?? "Не е посочен";
+
+  const subject = `Резервация отказана | Hustle Barber | ${payload.booking_date} ${st}`;
+
+  const textBody = [
+    "Резервация е отказана",
+    "",
+    `Име: ${payload.customer_name}`,
+    `Телефон: ${payload.customer_phone}`,
+    `Email: ${emailDisplay}`,
+    `Услуга: ${payload.service_name}`,
+    `Дата: ${payload.booking_date}`,
+    `Час: ${st} — ${et}`,
+    `Booking ID: ${payload.booking_id}`,
+    "",
+    "Слотът вече е свободен за нова резервация.",
+  ].join("\n");
+
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #111;">
+      <h2 style="margin: 0 0 4px 0; color: #c0392b;">Резервация отказана</h2>
+      <p style="color: #666; margin: 0 0 16px 0;">Hustle Barber</p>
+
+      <hr style="border: none; border-top: 1px solid #eee; margin: 16px 0;" />
+
+      <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+        <tr><td style="padding: 6px 0; color: #888; width: 140px;">Име</td><td style="padding: 6px 0; font-weight: 600;">${payload.customer_name}</td></tr>
+        <tr><td style="padding: 6px 0; color: #888;">Телефон</td><td style="padding: 6px 0; font-weight: 600;"><a href="tel:${payload.customer_phone}" style="color: #111; text-decoration: none;">${payload.customer_phone}</a></td></tr>
+        <tr><td style="padding: 6px 0; color: #888;">Email</td><td style="padding: 6px 0;">${emailDisplay}</td></tr>
+        <tr><td style="padding: 6px 0; color: #888;">Услуга</td><td style="padding: 6px 0; font-weight: 600;">${payload.service_name}</td></tr>
+        <tr><td style="padding: 6px 0; color: #888;">Дата</td><td style="padding: 6px 0; font-weight: 600;">${niceDate}</td></tr>
+        <tr><td style="padding: 6px 0; color: #888;">Час</td><td style="padding: 6px 0; font-weight: 600; font-size: 18px;">${st} — ${et}</td></tr>
+        <tr><td style="padding: 6px 0; color: #888;">Booking ID</td><td style="padding: 6px 0; color: #aaa; font-family: monospace; font-size: 12px;">${payload.booking_id}</td></tr>
+      </table>
+
+      <p style="color: #2e7d32; font-size: 13px; margin: 16px 0 0 0;">Слотът вече е свободен за нова резервация.</p>
+
+      <p style="color: #aaa; font-size: 11px; text-align: center; margin: 24px 0 0 0;">Hustle Barber · Онлайн записване</p>
+    </div>
+  `;
+
+  return resend.emails.send({
+    from: FROM_EMAIL,
+    to: ADMIN_EMAIL,
     subject,
     text: textBody,
     html,

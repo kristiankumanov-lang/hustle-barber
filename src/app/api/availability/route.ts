@@ -3,6 +3,8 @@ import { supabaseServer } from "@/lib/supabase-server";
 import { generateSlotsForDay, isWorkingDay, getTodaySofia } from "@/lib/slots";
 import { WorkingHoursRow } from "@/lib/types";
 
+export const dynamic = "force-dynamic";
+
 const FALLBACK_BUSINESS_ID = "b0000000-0000-0000-0000-000000000001";
 
 function isActiveBooking(status: string | null, expiresAt: string | null, nowIso: string) {

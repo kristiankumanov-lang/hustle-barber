@@ -7,6 +7,7 @@
  */
 
 import { useState } from "react";
+import Link from "next/link";
 
 interface Props {
   token: string;
@@ -46,7 +47,14 @@ export default function CancelConfirmButton({ token }: Props) {
         <p className="text-lg font-semibold text-[#F0EBE3] mb-1">
           {state.alreadyCancelled ? "Часът вече беше отменен" : "Часът е отменен"}
         </p>
-        <p className="text-sm text-[#A8A39A]">Слотът е освободен.</p>
+        <p className="text-sm text-[#A8A39A] mb-6">Слотът е освободен.</p>
+        <Link
+          href="/"
+          className="block w-full py-3 rounded-xl bg-[#EDE8E0] text-[#111111] font-semibold
+            hover:bg-white transition-all text-sm tracking-wide shadow-sm"
+        >
+          Запази нов час
+        </Link>
       </div>
     );
   }
