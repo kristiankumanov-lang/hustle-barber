@@ -343,6 +343,7 @@ export async function POST(request: NextRequest) {
         booking_date,
         start_time: startTimeDb,
         end_time: endTimeDb,
+        cancel_token: cancelToken,
       });
     } catch (e) {
       console.error("Грешка при client email:", e);

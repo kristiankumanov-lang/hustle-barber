@@ -15,6 +15,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase-server";
+import { sendAdminCancelEmail } from "@/lib/booking-email";
 
 export const dynamic = "force-dynamic";
 
@@ -79,7 +80,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<CancelRes
   // 1+2. Намери booking-а по token-а.
   const { data: booking, error } = await supabaseServer
     .from("bookings")
-    .select("id, booking_date, start_time, status")
+    .select(
+      "id, booking_date, start_time, end_time, customer_name, customer_phone, customer_email, status, service_id"
+    )
     .eq("cancel_token", token)
     .maybeSingle();
 
@@ -150,6 +153,29 @@ export async function POST(request: NextRequest): Promise<NextResponse<CancelRes
   if (!updated) {
     // Между read-а и update-а някой го е променил — пробвай отново да го прочетеш.
     return NextResponse.json({ ok: true, alreadyCancelled: true });
+  }
+
+  // Известяваме барбера. Best-effort — провал тук НЕ хвърля грешка нагоре
+  // и НЕ променя отговора към клиента (отказът вече е записан в базата).
+  try {
+    const { data: svc } = await supabaseServer
+      .from("services")
+      .select("name")
+      .eq("id", booking.service_id)
+      .maybeSingle();
+
+    await sendAdminCancelEmail({
+      booking_id: booking.id,
+      customer_name: booking.customer_name,
+      customer_phone: booking.customer_phone,
+      customer_email: booking.customer_email,
+      service_name: svc?.name ?? "—",
+      booking_date: booking.booking_date,
+      start_time: booking.start_time,
+      end_time: booking.end_time,
+    });
+  } catch (e) {
+    console.error("Cancel: грешка при admin email:", e);
   }
 
   return NextResponse.json({ ok: true });
