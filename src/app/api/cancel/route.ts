@@ -18,6 +18,7 @@ import { supabaseServer } from "@/lib/supabase-server";
 import { sendAdminCancelEmail } from "@/lib/booking-email";
 
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 // Часовете в базата са в българско време. Изчисляваме отместването на
 // Europe/Sofia спрямо UTC за конкретен момент (лято +3, зима +2).

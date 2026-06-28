@@ -13,6 +13,7 @@ import { supabaseServer } from "@/lib/supabase-server";
 import { sendTelegramMessage } from "@/lib/telegram";
 
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 // Прозорец напред: часове между +REMINDER_MIN_AHEAD и +REMINDER_MAX_AHEAD минути.
 // MAX трябва да е поне с интервала на cron-а по-голям от MIN, за да не се

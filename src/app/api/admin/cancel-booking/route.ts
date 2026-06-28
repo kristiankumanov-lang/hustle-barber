@@ -14,6 +14,7 @@ import { supabaseServer } from "@/lib/supabase-server";
 import { getCurrentUser, isBarberUser } from "@/lib/supabase-server-auth";
 
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 export async function POST(request: NextRequest) {
   const user = await getCurrentUser();

@@ -4,6 +4,7 @@ import { generateSlotsForDay, isWorkingDay, getTodaySofia } from "@/lib/slots";
 import { WorkingHoursRow } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 const FALLBACK_BUSINESS_ID = "b0000000-0000-0000-0000-000000000001";
 
