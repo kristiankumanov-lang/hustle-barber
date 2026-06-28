@@ -9,7 +9,7 @@ export async function fetchBusiness(): Promise<BusinessRow | null> {
 
   const { data, error } = await supabase
     .from("business")
-    .select("id, name, email")
+    .select("id, name")
     .limit(1)
     .single();
 

@@ -2,7 +2,6 @@
 export interface BusinessRow {
   id: string;
   name: string;
-  email: string;
 }
 
 /** Услуга (от Supabase) */

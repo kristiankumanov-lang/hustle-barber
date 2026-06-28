@@ -154,6 +154,17 @@ export default function Home() {
            style={{ fontFamily: "var(--font-serif), Georgia, serif" }}>
           {businessName || "Hustle Barber"}&nbsp;·&nbsp;{new Date().getFullYear()}
         </p>
+        <p className="mt-3 text-[10px] text-[#A8A39A] tracking-wide">
+          Powered by{" "}
+          <a
+            href="https://www.facebook.com/profile.php?id=61590868000717"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline-offset-2 hover:underline"
+          >
+            Kumanov AI Studio
+          </a>
+        </p>
       </footer>
     </div>
   );
