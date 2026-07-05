@@ -169,7 +169,7 @@ export function useBooking() {
   async function submitBooking(data: {
     name: string;
     phone: string;
-    email?: string;
+    email: string;
     recaptcha_token: string;
   }) {
     if (isSubmitting) return;

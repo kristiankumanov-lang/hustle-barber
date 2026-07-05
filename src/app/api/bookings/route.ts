@@ -176,6 +176,20 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  if (!customer_email || !customer_email.trim()) {
+    return NextResponse.json(
+      { success: false, message: "Имейлът е задължителен." },
+      { status: 400 }
+    );
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer_email.trim())) {
+    return NextResponse.json(
+      { success: false, message: "Невалиден имейл адрес." },
+      { status: 400 }
+    );
+  }
+
   if (!recaptcha_token) {
     return NextResponse.json(
       { success: false, message: "Липсва reCAPTCHA проверка." },
@@ -333,22 +347,20 @@ export async function POST(request: NextRequest) {
     console.error("Грешка при admin email:", e);
   }
 
-  // === Мейл към клиента (само ако е оставил мейл) ===
-  if (trimmedEmail) {
-    try {
-      await sendClientBookingEmail({
-        to_email: trimmedEmail,
-        customer_name: customer_name.trim(),
-        service_name: serviceData.name,
-        duration_minutes: serviceData.duration_minutes,
-        booking_date,
-        start_time: startTimeDb,
-        end_time: endTimeDb,
-        cancel_token: cancelToken,
-      });
-    } catch (e) {
-      console.error("Грешка при client email:", e);
-    }
+  // === Мейл към клиента ===
+  try {
+    await sendClientBookingEmail({
+      to_email: trimmedEmail!,
+      customer_name: customer_name.trim(),
+      service_name: serviceData.name,
+      duration_minutes: serviceData.duration_minutes,
+      booking_date,
+      start_time: startTimeDb,
+      end_time: endTimeDb,
+      cancel_token: cancelToken,
+    });
+  } catch (e) {
+    console.error("Грешка при client email:", e);
   }
 
   return NextResponse.json({

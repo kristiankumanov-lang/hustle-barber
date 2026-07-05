@@ -15,7 +15,7 @@ interface Props {
   onSubmit: (data: {
     name: string;
     phone: string;
-    email?: string;
+    email: string;
     recaptcha_token: string;
   }) => void;
   onBack: () => void;
@@ -86,7 +86,12 @@ export default function BookingForm({
       return;
     }
 
-    if (email.trim() && !email.includes("@")) {
+    if (!email.trim()) {
+      setError("Моля, въведете вашия имейл.");
+      return;
+    }
+
+    if (!email.includes("@")) {
       setError("Моля, въведете валиден имейл адрес.");
       return;
     }
@@ -108,7 +113,7 @@ export default function BookingForm({
     onSubmit({
       name: name.trim(),
       phone: normalizedPhone,
-      email: email.trim() || undefined,
+      email: email.trim(),
       recaptcha_token: recaptchaToken,
     });
   }
@@ -131,12 +136,6 @@ export default function BookingForm({
     "block text-xs font-medium text-[#7A7570] mb-1.5 tracking-wide uppercase";
   const requiredStar = (
     <span className="text-[#EDE8E0]/50 normal-case tracking-normal"> *</span>
-  );
-  const optionalTag = (
-    <span className="text-[#4A4845] normal-case tracking-normal font-normal">
-      {" "}
-      (по избор)
-    </span>
   );
 
   const isBusy = isSubmitting || isPreparing;
@@ -219,7 +218,7 @@ export default function BookingForm({
 
         <div>
           <label htmlFor="email" className={labelClass}>
-            Имейл{optionalTag}
+            Имейл{requiredStar}
           </label>
           <input
             id="email"
@@ -229,9 +228,10 @@ export default function BookingForm({
             placeholder="you@example.com"
             className={inputClass}
             autoComplete="email"
+            required
           />
           <p className="text-[10px] text-[#4A4845] mt-1.5 ml-1">
-            Ако го оставиш, ще получиш потвърждение на мейла.
+            Ще получиш потвърждение на мейла.
           </p>
         </div>
 
