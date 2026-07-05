@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase-server";
 import { getCurrentUser, isBarberUser } from "@/lib/supabase-server-auth";
+import { sendClientCancelEmail } from "@/lib/booking-email";
 
 export const dynamic = "force-dynamic";
 export const fetchCache = "force-no-store";
@@ -42,7 +43,9 @@ export async function POST(request: NextRequest) {
 
   const { data: booking, error } = await supabaseServer
     .from("bookings")
-    .select("id, status")
+    .select(
+      "id, status, customer_email, customer_name, service_id, booking_date, start_time, end_time, services ( name )"
+    )
     .eq("id", bookingId)
     .maybeSingle();
 
@@ -96,6 +99,23 @@ export async function POST(request: NextRequest) {
 
   if (!updated) {
     return NextResponse.json({ ok: true, alreadyCancelled: true });
+  }
+
+  // Известяваме клиента (ако е оставил имейл). Best-effort — провал тук НЕ
+  // хвърля грешка нагоре и НЕ променя отговора (отказът вече е записан в базата).
+  if (booking.customer_email) {
+    try {
+      await sendClientCancelEmail({
+        to_email: booking.customer_email,
+        customer_name: booking.customer_name,
+        service_name: (booking.services as { name?: string } | null)?.name ?? "—",
+        booking_date: booking.booking_date,
+        start_time: booking.start_time,
+        end_time: booking.end_time,
+      });
+    } catch (e) {
+      console.error("Admin cancel: грешка при client email:", e);
+    }
   }
 
   return NextResponse.json({ ok: true });

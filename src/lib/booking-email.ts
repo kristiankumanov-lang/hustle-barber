@@ -285,3 +285,81 @@ export async function sendAdminCancelEmail(payload: AdminCancelEmailPayload) {
     html,
   });
 }
+
+// ─────────────────────────────────────────────────────────────
+// ОТКАЗ (към клиента)
+// ─────────────────────────────────────────────────────────────
+
+export interface ClientCancelEmailPayload {
+  to_email: string;
+  customer_name: string;
+  service_name: string;
+  booking_date: string;
+  start_time: string;
+  end_time: string;
+}
+
+export async function sendClientCancelEmail(payload: ClientCancelEmailPayload) {
+  const st = formatTime(payload.start_time);
+  const et = formatTime(payload.end_time);
+  const niceDate = formatDate(payload.booking_date);
+  const siteUrl = getSiteUrl();
+
+  const subject = `Часът ти беше отменен — Hustle Barber, ${payload.booking_date} ${st}`;
+
+  const textBody = [
+    `Здравей, ${payload.customer_name}!`,
+    "",
+    "За съжаление часът ти беше отменен.",
+    "",
+    `Услуга: ${payload.service_name}`,
+    `Дата: ${niceDate}`,
+    `Час: ${st} — ${et}`,
+    "",
+    "Можеш да запазиш нов час по всяко време от сайта:",
+    siteUrl,
+    "",
+    "До скоро,",
+    "Екипът на Hustle Barber",
+  ].join("\n");
+
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 520px; margin: 0 auto; padding: 28px; color: #111;">
+      <h2 style="margin: 0 0 8px 0; font-size: 22px;">Часът ти беше отменен</h2>
+      <p style="color: #666; margin: 0 0 20px 0;">Hustle Barber</p>
+
+      <p style="font-size: 15px; line-height: 1.6; margin: 0 0 18px 0;">
+        Здравей, <strong>${payload.customer_name}</strong>! За съжаление часът ти беше отменен.
+      </p>
+
+      <table style="width: 100%; border-collapse: collapse; font-size: 14px; background: #fafafa; border-radius: 8px; padding: 4px;">
+        <tr><td style="padding: 10px 14px; color: #888; width: 130px;">Услуга</td><td style="padding: 10px 14px; font-weight: 600;">${payload.service_name}</td></tr>
+        <tr><td style="padding: 10px 14px; color: #888;">Дата</td><td style="padding: 10px 14px; font-weight: 600;">${niceDate}</td></tr>
+        <tr><td style="padding: 10px 14px; color: #888;">Час</td><td style="padding: 10px 14px; font-weight: 600; font-size: 18px;">${st} — ${et}</td></tr>
+      </table>
+
+      <div style="margin: 22px 0; text-align: center;">
+        <a href="${siteUrl}"
+           style="display: inline-block; padding: 10px 20px; background: #f5f5f5; color: #111; text-decoration: none; border: 1px solid #ddd; border-radius: 8px; font-weight: 600; font-size: 14px;">
+          Запази нов час
+        </a>
+        <p style="color: #999; font-size: 12px; margin: 8px 0 0 0;">Можеш да запазиш нов час по всяко време от сайта.</p>
+      </div>
+
+      <p style="font-size: 14px; color: #555; line-height: 1.6; margin: 18px 0 0 0;">
+        До скоро,<br/>
+        <strong>Екипът на Hustle Barber</strong>
+      </p>
+
+      <p style="color: #aaa; font-size: 11px; text-align: center; margin: 28px 0 0 0;">Hustle Barber · Онлайн записване</p>
+    </div>
+  `;
+
+  return resend.emails.send({
+    from: FROM_EMAIL,
+    to: payload.to_email,
+    subject,
+    text: textBody,
+    html,
+  });
+}
