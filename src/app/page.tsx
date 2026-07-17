@@ -1,147 +1,40 @@
-"use client";
-
-import { useRef } from "react";
+import Script from "next/script";
 import Header from "@/components/Header";
-import ServiceList from "@/components/ServiceList";
-import Calendar from "@/components/Calendar";
-import TimeSlots from "@/components/TimeSlots";
-import BookingForm from "@/components/BookingForm";
-import SuccessMessage from "@/components/SuccessMessage";
-import { useBooking } from "@/hooks/useBooking";
+import HomeClient from "@/components/HomeClient";
+import { loadInitialBookingData } from "@/lib/queries-server";
 
-export default function Home() {
-  const bookingRef = useRef<HTMLDivElement>(null);
+/**
+ * Server Component — business/services/working-hours/blocked-days се
+ * fetch-ват тук (по време на render, на сървъра) вместо в useEffect след
+ * hydration. Премахва client-side Supabase waterfall-а за initial load;
+ * refetch-ът при връщане към таба (focus/visibility) в useBooking остава
+ * client-side, непроменен.
+ */
+export default async function Home() {
+  const initial = await loadInitialBookingData();
 
-  const {
-    businessName, services, workingHours, blockedDays,
-    isLoading, loadError,
-    selectedService, selectedDate, selectedTime,
-    confirmedService, confirmedDate, confirmedTime,
-    step, result, isSubmitting,
-    timeSlots, isSlotsLoading,
-    selectService, selectDate, selectTime,
-    submitBooking, reset, setStep,
-  } = useBooking();
-
-  const visibleServices = services.filter(
-    (s) => s.name.toLowerCase() !== "друго"
-  );
-
-  function scrollToBooking() {
-    bookingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#111111]">
-        <Header businessName="" />
-        <div className="flex items-center justify-center py-20">
-          <div className="text-center">
-            <div className="w-6 h-6 border-2 border-white/10 border-t-white/40 rounded-full animate-spin mx-auto mb-3" />
-            <p className="text-[#555] text-[11px] tracking-[0.3em] uppercase"
-               style={{ fontFamily: "var(--font-serif), Georgia, serif" }}>
-              Зареждане
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (loadError) {
+  if (initial.loadError) {
     return (
       <div className="min-h-screen bg-[#111111]">
         <Header businessName="" />
         <div className="max-w-2xl mx-auto px-6 py-16 text-center">
-          <p className="text-[#888]">{loadError}</p>
+          <p className="text-[#888]">{initial.loadError}</p>
         </div>
       </div>
     );
   }
 
+  // reCAPTCHA v3 site key. Public — окей е да е в client bundle-а.
+  // Скриптът се зарежда само тук (началната страница), защото само
+  // BookingForm-ът (стъпка 4 от резервацията) го ползва — /admin и /cancel
+  // не се нуждаят от него.
+  const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY ?? "";
+
   return (
     <div className="min-h-screen bg-[#111111]">
-      <Header businessName={businessName} />
+      <Header businessName={initial.businessName} />
 
-      {/* ── CTA ─────────────────────────────────── */}
-      <div className="max-w-2xl mx-auto px-6 pt-6 pb-5 text-center">
-        <button
-          onClick={scrollToBooking}
-          className="
-            inline-flex items-center gap-2.5 px-7 py-3 rounded-full
-            border border-[#F0EBE3]/20 bg-[#F0EBE3] text-[#111111]
-            text-[12px] tracking-[0.25em] uppercase font-semibold
-            hover:bg-white active:scale-[0.98]
-            transition-all duration-150 shadow-sm
-          "
-          style={{ fontFamily: "var(--font-serif), Georgia, serif" }}
-        >
-          Запази своя час онлайн сега
-          <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden>
-            <path d="M5.5 1v8M2 6.5l3.5 3.5 3.5-3.5" stroke="currentColor"
-              strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </button>
-
-        <div className="flex items-center justify-center gap-3 mt-4">
-          <div className="h-px w-12 bg-[#2E2E2E]" />
-          <svg width="6" height="6" viewBox="0 0 6 6" aria-hidden>
-            <rect x="3" y="0" width="2.1" height="2.1" transform="rotate(45 3 0)" fill="#3A3A3A"/>
-          </svg>
-          <div className="h-px w-12 bg-[#2E2E2E]" />
-        </div>
-      </div>
-
-      {/* ── Booking card ────────────────────────── */}
-      <div ref={bookingRef} className="max-w-2xl mx-auto px-4 pb-12 scroll-mt-4">
-        <div className="bg-[#1C1C1C] border border-[#2E2E2E] rounded-2xl shadow-[0_4px_40px_rgba(0,0,0,0.5)]">
-          {step === "success" && result ? (
-            <div className="px-7 py-9 sm:px-10">
-              <SuccessMessage
-                result={result}
-                onReset={reset}
-                serviceName={visibleServices.find(s => s.id === confirmedService)?.name}
-                date={confirmedDate}
-                time={confirmedTime}
-              />
-            </div>
-          ) : (
-            <div className="px-6 py-7 sm:px-9 sm:py-8">
-              <ServiceList services={visibleServices} selected={selectedService} onSelect={selectService} />
-
-              {step !== "service" && (
-                <>
-                  <hr className="section-divider" />
-                  <Calendar
-                    workingHours={workingHours}
-                    blockedDays={blockedDays}
-                    selected={selectedDate}
-                    onSelect={selectDate}
-                  />
-                  <hr className="section-divider" />
-                  <TimeSlots slots={timeSlots} selected={selectedTime} onSelect={selectTime} isLoading={isSlotsLoading} />
-                </>
-              )}
-
-              {step === "form" && selectedTime && (
-                <>
-                  <hr className="section-divider" />
-                  <BookingForm
-                    services={visibleServices}
-                    serviceId={selectedService}
-                    date={selectedDate}
-                    time={selectedTime}
-                    isSubmitting={isSubmitting}
-                    serverResult={result}
-                    onSubmit={submitBooking}
-                    onBack={() => setStep("datetime")}
-                  />
-                </>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
+      <HomeClient initial={initial} />
 
       {/* ── Footer ──────────────────────────────── */}
       <footer className="pb-10 text-center">
@@ -152,7 +45,7 @@ export default function Home() {
         </div>
         <p className="text-[11px] text-[#444] tracking-[0.22em] uppercase"
            style={{ fontFamily: "var(--font-serif), Georgia, serif" }}>
-          {businessName || "Hustle Barber"}&nbsp;·&nbsp;{new Date().getFullYear()}
+          {initial.businessName || "Hustle Barber"}&nbsp;·&nbsp;{new Date().getFullYear()}
         </p>
         <p className="mt-3 text-[10px] text-[#A8A39A] tracking-wide">
           Powered by{" "}
@@ -166,6 +59,18 @@ export default function Home() {
           </a>
         </p>
       </footer>
+
+      {/*
+        reCAPTCHA v3 — зарежда се ленив (afterInteractive), за да не блокира
+        render-а. Само ако SITE_KEY е конфигуриран — иначе пропускаме скрипта
+        (например в локална среда без reCAPTCHA, формата ще даде ясна грешка).
+      */}
+      {RECAPTCHA_SITE_KEY ? (
+        <Script
+          src={`https://www.google.com/recaptcha/api.js?render=${RECAPTCHA_SITE_KEY}`}
+          strategy="afterInteractive"
+        />
+      ) : null}
     </div>
   );
 }

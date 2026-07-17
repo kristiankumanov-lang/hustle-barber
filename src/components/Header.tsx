@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 
 interface Props {
   businessName: string;
@@ -145,13 +146,16 @@ export default function Header({ businessName }: Props) {
       {/* ── Thin separator ───────────────────────────────── */}
       <div className="border-t border-white/[0.06]" />
 
-      {/* ── Moustache logo — primary hero brand anchor ─────── */}
+      {/* ── Moustache logo — primary hero brand anchor (LCP element) ─────── */}
       <div className="flex justify-center pt-4 pb-5">
         {logoOk ? (
-          <img
+          <Image
             src="/images/hustle-barber-logo.png"
             alt={businessName || "Hustle Barber"}
-            width={200} height={100}
+            width={1024}
+            height={561}
+            priority
+            sizes="(min-width: 640px) 200px, 190px"
             className="w-[190px] sm:w-[200px] h-auto object-contain"
             onError={() => setLogoOk(false)}
           />

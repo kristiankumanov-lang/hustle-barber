@@ -16,14 +16,29 @@ import {
 
 export type BookingStep = "service" | "datetime" | "form" | "success";
 
-export function useBooking() {
-  const [businessId, setBusinessId] = useState<string>("");
-  const [businessName, setBusinessName] = useState<string>("");
-  const [services, setServices] = useState<Service[]>([]);
-  const [workingHours, setWorkingHours] = useState<WorkingHoursRow[]>([]);
-  const [blockedDays, setBlockedDays] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string>("");
+export interface BookingInitialData {
+  businessId: string;
+  businessName: string;
+  services: Service[];
+  workingHours: WorkingHoursRow[];
+  blockedDays: string[];
+  loadError: string;
+}
+
+/**
+ * `initial` идва от Server Component fetch (виж queries-server.ts) — когато
+ * е подаден, пропускаме client-side fetch-а при mount, защото данните вече
+ * са в първоначалния HTML. Refetch-ът при връщане към таба (focus/visibility)
+ * по-долу остава непроменен и винаги минава през browser Supabase client-а.
+ */
+export function useBooking(initial?: BookingInitialData) {
+  const [businessId, setBusinessId] = useState<string>(initial?.businessId ?? "");
+  const [businessName, setBusinessName] = useState<string>(initial?.businessName ?? "");
+  const [services, setServices] = useState<Service[]>(initial?.services ?? []);
+  const [workingHours, setWorkingHours] = useState<WorkingHoursRow[]>(initial?.workingHours ?? []);
+  const [blockedDays, setBlockedDays] = useState<string[]>(initial?.blockedDays ?? []);
+  const [isLoading, setIsLoading] = useState(!initial);
+  const [loadError, setLoadError] = useState<string>(initial?.loadError ?? "");
 
   const [selectedService, setSelectedService] = useState<string>("");
   const [selectedDate, setSelectedDate] = useState<string>("");
@@ -70,9 +85,10 @@ export function useBooking() {
   }, []);
 
   useEffect(() => {
+    if (initial) return; // вече имаме данни от SSR — първоначалният fetch не е нужен
     setIsLoading(true);
     loadData().finally(() => setIsLoading(false));
-  }, [loadData]);
+  }, [loadData, initial]);
 
   const loadSlots = useCallback(
     async (dateStr: string) => {
