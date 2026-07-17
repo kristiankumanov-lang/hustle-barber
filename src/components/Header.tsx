@@ -119,8 +119,15 @@ export default function Header({ businessName }: Props) {
         {/* HB — small, secondary, subtle */}
         <div className="w-8 h-8 rounded-full border border-white/15 bg-[#1A1A1A] overflow-hidden flex-shrink-0 flex items-center justify-center">
           {hbOk ? (
-            <img src="/images/hb-monogram.png" alt="HB" width={32} height={32}
-              className="w-full h-full object-cover" onError={() => setHbOk(false)} />
+            <Image
+              src="/images/hb-monogram.png"
+              alt="HB"
+              width={379}
+              height={379}
+              sizes="32px"
+              className="w-full h-full object-cover"
+              onError={() => setHbOk(false)}
+            />
           ) : (
             <span className="text-white text-xs font-semibold tracking-wide select-none"
               style={{ fontFamily: "var(--font-cormorant), Georgia, serif" }}>HB</span>

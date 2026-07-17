@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Service, BookingResult } from "@/lib/types";
 import { getServiceById } from "@/lib/services";
-import { executeRecaptcha } from "@/lib/recaptcha";
+import { executeRecaptcha, loadRecaptchaScript } from "@/lib/recaptcha";
 
 interface Props {
   services: Service[];
@@ -61,6 +61,13 @@ export default function BookingForm({
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [isPreparing, setIsPreparing] = useState(false);
+
+  // BookingForm mount-ва само при step === "form" (гейтнато от родителя) —
+  // тук е естественото място скриптът да се зареди лениво, точно когато
+  // потребителят реално стигне до тази стъпка, вместо на всеки page load.
+  useEffect(() => {
+    loadRecaptchaScript();
+  }, []);
 
   const service = getServiceById(services, serviceId);
 

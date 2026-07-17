@@ -1,11 +1,15 @@
 /**
  * Helper за reCAPTCHA v3.
  *
- * Скриптът се зарежда от layout.tsx (afterInteractive). Тук просто чакаме
- * `grecaptcha` да стане наличен и викаме execute с action-а.
+ * Скриптът НЕ се зарежда глобално при mount — 793 KiB transfer и всичките
+ * long main-thread tasks на PageSpeed идваха точно от него, а реално се
+ * ползва само в BookingForm (стъпка "form" от booking flow-а). Вместо това
+ * loadRecaptchaScript() се вика от BookingForm при mount и инжектира <script>
+ * тага лениво, точно когато потребителят реално стигне до тази стъпка.
  *
- * Връща низ-токен или хвърля грешка ако нещо не е наред — извикващият
- * (BookingForm) показва приятелски текст на потребителя.
+ * executeRecaptcha() чака `grecaptcha` да стане наличен и вика execute с
+ * action-а. Връща низ-токен или хвърля грешка ако нещо не е наред —
+ * извикващият (BookingForm) показва приятелски текст на потребителя.
  */
 
 declare global {
@@ -17,7 +21,36 @@ declare global {
   }
 }
 
-const READY_TIMEOUT_MS = 5000;
+// По-дълъг от преди (5000ms), защото скриптът вече започва да се тегли чак
+// при вход в стъпка "form", а не отрано при mount на страницата — на бавна
+// мрежа трябва повече престой преди да отчетем неуспех.
+const READY_TIMEOUT_MS = 8000;
+
+let scriptRequested = false;
+
+/**
+ * Добавя reCAPTCHA v3 <script> тага в document — идемпотентно, безопасно е
+ * да се вика при всеки mount на BookingForm (напр. потребител се връща със
+ * "Назад" и после пак напред към формата). Не прави нищо, ако скриптът вече
+ * е инжектиран/зареден, или ако липсва site key.
+ */
+export function loadRecaptchaScript(): void {
+  if (typeof window === "undefined" || scriptRequested) return;
+  if (window.grecaptcha || document.querySelector("script[data-recaptcha-loader]")) {
+    scriptRequested = true;
+    return;
+  }
+
+  const siteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
+  if (!siteKey) return;
+
+  scriptRequested = true;
+  const script = document.createElement("script");
+  script.src = `https://www.google.com/recaptcha/api.js?render=${siteKey}`;
+  script.async = true;
+  script.dataset.recaptchaLoader = "true";
+  document.head.appendChild(script);
+}
 
 function waitForGrecaptcha(): Promise<NonNullable<Window["grecaptcha"]>> {
   return new Promise((resolve, reject) => {

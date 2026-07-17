@@ -1,4 +1,3 @@
-import Script from "next/script";
 import Header from "@/components/Header";
 import HomeClient from "@/components/HomeClient";
 import { loadInitialBookingData } from "@/lib/queries-server";
@@ -23,12 +22,6 @@ export default async function Home() {
       </div>
     );
   }
-
-  // reCAPTCHA v3 site key. Public — окей е да е в client bundle-а.
-  // Скриптът се зарежда само тук (началната страница), защото само
-  // BookingForm-ът (стъпка 4 от резервацията) го ползва — /admin и /cancel
-  // не се нуждаят от него.
-  const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY ?? "";
 
   return (
     <div className="min-h-screen bg-[#111111]">
@@ -59,18 +52,6 @@ export default async function Home() {
           </a>
         </p>
       </footer>
-
-      {/*
-        reCAPTCHA v3 — зарежда се ленив (afterInteractive), за да не блокира
-        render-а. Само ако SITE_KEY е конфигуриран — иначе пропускаме скрипта
-        (например в локална среда без reCAPTCHA, формата ще даде ясна грешка).
-      */}
-      {RECAPTCHA_SITE_KEY ? (
-        <Script
-          src={`https://www.google.com/recaptcha/api.js?render=${RECAPTCHA_SITE_KEY}`}
-          strategy="afterInteractive"
-        />
-      ) : null}
     </div>
   );
 }
