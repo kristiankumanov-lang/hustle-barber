@@ -54,13 +54,43 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ slots: [] });
   }
 
-  // 🆕 Проверка дали целия ден е блокиран от админа.
-  const { data: blockedDayData, error: bdError } = await supabaseServer
-    .from("blocked_days")
-    .select("id")
-    .eq("business_id", businessId)
-    .eq("blocked_date", date)
-    .maybeSingle();
+  const nowIso = new Date().toISOString();
+
+  // Вълна 1 — четирите заявки нямат взаимна зависимост, тръгват едновременно.
+  // (lazy-expire UPDATE-ът тук е "изпреварващ" спрямо bookings SELECT-а от Вълна 2,
+  // не спрямо нещо в тази вълна — затова е безопасно да е редом с останалите три.)
+  const [
+    { data: blockedDayData, error: bdError },
+    { data: workingHoursData, error: whError },
+    { error: expireError },
+    { data: blockedSlotsData, error: bsError },
+  ] = await Promise.all([
+    // 🆕 Проверка дали целия ден е блокиран от админа.
+    supabaseServer
+      .from("blocked_days")
+      .select("id")
+      .eq("business_id", businessId)
+      .eq("blocked_date", date)
+      .maybeSingle(),
+    supabaseServer
+      .from("working_hours")
+      .select("*")
+      .eq("business_id", businessId),
+    // Lazy expiry: не чакаме cron. При всяко четене маркираме старите pending записи като expired.
+    supabaseServer
+      .from("bookings")
+      .update({ status: "expired" })
+      .eq("business_id", businessId)
+      .eq("booking_date", date)
+      .eq("status", "pending")
+      .lt("expires_at", nowIso),
+    // 🆕 Блокирани отделни часове от админа.
+    supabaseServer
+      .from("blocked_slots")
+      .select("start_time, end_time")
+      .eq("business_id", businessId)
+      .eq("blocked_date", date),
+  ]);
 
   if (bdError) {
     console.warn("Грешка при проверка на blocked_days:", bdError.message);
@@ -71,11 +101,6 @@ export async function GET(request: NextRequest) {
     // Цял ден почивка → връщаме празен списък, точно както при non-working day.
     return NextResponse.json({ slots: [] });
   }
-
-  const { data: workingHoursData, error: whError } = await supabaseServer
-    .from("working_hours")
-    .select("*")
-    .eq("business_id", businessId);
 
   if (whError) {
     console.error("Грешка при зареждане на работното време:", whError.message);
@@ -99,22 +124,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ slots: [] });
   }
 
-  const nowIso = new Date().toISOString();
-
-  // Lazy expiry: не чакаме cron. При всяко четене маркираме старите pending записи като expired.
-  const { error: expireError } = await supabaseServer
-    .from("bookings")
-    .update({ status: "expired" })
-    .eq("business_id", businessId)
-    .eq("booking_date", date)
-    .eq("status", "pending")
-    .lt("expires_at", nowIso);
-
   if (expireError) {
     console.warn("Неуспешно lazy expire на pending bookings:", expireError.message);
   }
 
-  // Резервации (вече съществуваща логика)
+  if (bsError) {
+    console.warn("Грешка при зареждане на blocked_slots:", bsError.message);
+  }
+
+  // Вълна 2 — bookings SELECT-ът трябва да изчака lazy-expire UPDATE-а от Вълна 1
+  // да приключи (вече е приключил, защото сме await-нали целия Promise.all по-горе),
+  // за да не преброим только-що expired запис като все още зает слот.
   const { data: bookingsData, error: bkError } = await supabaseServer
     .from("bookings")
     .select("start_time, booking_date, status, expires_at")
@@ -133,17 +153,6 @@ export async function GET(request: NextRequest) {
   const bookedTimes = (bookingsData ?? [])
     .filter((b) => isActiveBooking(b.status, b.expires_at, nowIso))
     .map((b) => b.start_time.slice(0, 5));
-
-  // 🆕 Блокирани отделни часове от админа.
-  const { data: blockedSlotsData, error: bsError } = await supabaseServer
-    .from("blocked_slots")
-    .select("start_time, end_time")
-    .eq("business_id", businessId)
-    .eq("blocked_date", date);
-
-  if (bsError) {
-    console.warn("Грешка при зареждане на blocked_slots:", bsError.message);
-  }
 
   const blockedTimes: string[] = (blockedSlotsData ?? []).flatMap((b) =>
     expandBlockedRangeToSlots(b.start_time, b.end_time)
